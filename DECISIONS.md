@@ -373,3 +373,51 @@ Append-only, newest at the bottom. Never rewrite history; reverse a decision wit
 - **Decision**: a job that has left the queue is finished: after it was seen and is gone for two looks, or has never been listed for three, the file named by the start's `uri` is fetched. The fetch is retried (6 times, 2 s apart) in case the file is still being written. The name's backslashes become slashes in the address (`/clips/Clipboard/FrontDrive....mp4`).
 - **Unverified**: that `/clips/<that uri>` serves the file with the session cookie alone (the failure message will say if not).
 - **Impact**: `ui/AppViewModel.kt`, `data/BlueIrisClient.kt`.
+
+### 2026-11-25, Push notifications from Blue Iris (analysis, not yet decided)
+- **Context**: Owner wants motion and doorbell notifications pushed from Blue Iris, never polled by the app.
+- **Options considered**: (1) Blue Iris "Web request or MQTT" alert action posts to a self-hosted or public ntfy topic; the phone receives it through the ntfy app as a UnifiedPush distributor, or ntfy's own app. (2) Blue Iris publishes to MQTT; the app keeps a socket open from a foreground service. (3) The official app's cloud push (FCM through Blue Iris's own servers): proprietary registration, not available to a third-party app. (4) FCM through our own relay: needs a Google project and a server we run.
+- **Decision**: leaning to option 1 (UnifiedPush, no Google); to be confirmed with the owner. Planned as its own milestone after M5 (needs the settings screen and alert deep links).
+- **Rationale**: the only push path that is true push, needs no polling, no always-on socket of ours, and works with the HTTPS-only/no-cloud rule when self-hosted.
+- **Impact**: new milestone in STATUS.md; a Blue Iris alert action must be configured by the owner; notification payload must carry camera and alert path only (no secrets); tapping opens the alert in the player.
+
+### 2026-11-25, Notifications stay in Home Assistant; the app only needs deep links (reverses the ntfy proposal above)
+- **Context**: The owner already gets motion and doorbell notifications through Home Assistant and its Android app, driven by Blue Iris MQTT alerts (payload has the camera short name, a memo and the alert record name). The notifications' tap action and buttons open the Blue Iris web interface.
+- **Options considered**: build our own push channel (ntfy, MQTT, FCM relay); or keep Home Assistant as the sender and make Sightline openable from a notification.
+- **Decision**: no push code in this app. Add deep links (custom scheme) that open a live camera, an alert's clip, or the alerts list. Then change the Home Assistant automations' tap action and URI buttons to those links.
+- **Rationale**: push already works; the missing piece is where the tap lands. Much smaller and no new server or battery cost.
+- **Impact**: new milestone M4b after M4 (alerts tab gives the alert-by-id screen): link handler in MainActivity (needs sign-in/lock handling and a fallback when the app is not installed), links documented in docs/. Home Assistant automation edits happen in the ha project, not here. Supersedes M5b in STATUS.md.
+
+### 2026-11-25, Download a range: set the ends at the playhead, find the file with cliplist
+- **Context**: Step 2 of download: any stretch of a camera's recordings, not only a whole alert (the web app has draggable handles on its timeline).
+- **Options considered**: drag handles on the timeline bar; buttons that set the start and end at the playhead, with the band shaded on the timeline.
+- **Decision**: buttons ("Set start here", "Set end here") and tapping a time to look at it. The band is shaded on the timeline. The file comes from `cliplist` (or the alert's own file when it holds the start), and the range is cut at the end of that file. Limit 2 hours.
+- **Rationale**: the timeline bar already uses one finger to scrub and two to pinch, so handles would fight it; buttons are exact and work on a small screen. Same behaviour as the web app's "set at playhead" path.
+- **Impact**: handle dragging can be added later if wanted. `Camera.bps` added (tolerant of text). Group view has no download.
+
+### 2026-11-25, Download location is a setting (phone folder picker)
+- **Context**: The owner wants to choose where downloaded MP4s go. Until now they always went to the Downloads folder.
+- **Options considered**: a typed path (not possible: Android blocks direct file paths); the system folder picker with a kept permission (Storage Access Framework); a fixed sub-folder of Downloads.
+- **Decision**: Settings > Downloads > "Save downloads to" opens the system folder picker; the app keeps permission to that folder and saves there. "Use the Downloads folder again" goes back. Folder permission is checked before Blue Iris is asked to make a clip, so a lost folder fails at once with a message instead of after a long export.
+- **Rationale**: the only supported way for an app to write to a folder the owner picks, no storage permission needed. Android refuses the top of storage and the Download folder itself, so Settings says to make a folder inside it.
+- **Impact**: `AppViewModel.setDownloadFolder`, `saveToFolder`; pref `download_folder` holds the folder's address (stays on the phone). The saved message names the folder.
+
+### 2026-11-25, The folder picker must not lock the app
+- **Context**: Owner reported the app crashing on "Save downloads to". No crash log was available (no phone connected over adb). The first suspect was that opening the picker stops the app, and coming back with "Lock the app: Always" locked it and dropped the session.
+- **Decision**: the app notes when it opens the picker and ignores that one return (within 10 minutes) for the lock check. Opening the picker is also guarded: a failure shows a message naming the error instead of crashing.
+- **Impact**: `AppViewModel.openingPicker`; if it still crashes the log is needed (`adb logcat -d AndroidRuntime:E`).
+
+### 2026-11-25, Newer Fragment library: the folder picker failed on request codes
+- **Context**: "Save downloads to" failed with `IllegalArgumentException: Can only use lower 16 bits for requestCode`. `androidx.biometric` 1.1.0 pulled in Fragment 1.2.5, whose `FragmentActivity` rejects the request codes of the activity result API (used by `rememberLauncherForActivityResult`).
+- **Decision**: depend on `androidx.fragment:fragment` 1.8.9 directly, so the newer one wins.
+- **Impact**: `libs.versions.toml`, `app/build.gradle.kts`. Any later use of the activity result API (pickers, permissions) works. The folder-picker failure message now shows the error text, which is kept as a diagnostic.
+
+### 2026-11-25, Pull to refresh replaces the header's refresh button
+- **Context**: The header had a Refresh button that reloads the camera list. The list already updates by itself (status every 2 s), so the button was rarely needed and unclear.
+- **Decision**: remove it and pull down from the top of the camera grid instead (Material `PullToRefreshBox`). It reloads the camera list, same as before. The empty "No cameras" screen scrolls too, so it can be pulled as well.
+- **Impact**: `SightlineHeader` lost its refresh parameter; `Glyph.Refresh` is now unused. Differs from the web app, which has a button.
+
+### 2026-11-25, Restart the decoder when a recording changes picture size
+- **Context**: Some cameras record a small sub stream until something happens and the full one after, so a recording can change picture size part-way (the web app starts a fresh player for this). Our decoder was set up once from the stream header.
+- **Decision**: on each key frame the sequence parameter set (`sequenceParameterSet`) is compared with the last one; when it differs, the decoder is stopped and a new one started on the same surface and connection. The new picture size comes from the decoder's output format (crop-aware) and is passed to the player (`onSize`), but only after a restart, since at the start the header already gives it and some decoders report a padded height.
+- **Impact**: `video/LivePlayer.kt`, `video/StreamSizing.kt`. Untested on a real size change (the owner's cameras may not do it).

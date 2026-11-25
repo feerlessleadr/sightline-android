@@ -368,6 +368,29 @@ class BlueIrisClient(
         return Timeline.parse(reply.data, startSec * 1000, msecPerPixel)
     }
 
+    /**
+     * The recording files of [camera] that may hold something between [startMs] and [endMs] (`cliplist`). Blue Iris lists
+     * files by when they start, so it is asked from a day and a half earlier, in case a long file still covers [startMs].
+     * Some versions do not know the `view` option, so a refusal is asked again without it.
+     */
+    suspend fun recordingFiles(camera: String, startMs: Long, endMs: Long): List<RecordingFile> {
+        fun body(withView: Boolean) = buildJsonObject {
+            put("cmd", "cliplist")
+            put("camera", camera)
+            put("startdate", startMs / 1000 - 36 * 3600)
+            put("enddate", (endMs + 999) / 1000 + 60)
+            if (withView) put("view", "all")
+        }
+        val reply = try {
+            call(body(true))
+        } catch (e: SessionExpiredException) {
+            throw e
+        } catch (e: BlueIrisException) {
+            call(body(false))
+        }
+        return RecordingFiles.parse(reply.data, System.currentTimeMillis())
+    }
+
     /** The alerts of one camera in a period (for jumping to the previous and next one), oldest first. */
     suspend fun cameraAlerts(camera: String, startMs: Long, endMs: Long): List<AlertItem> {
         val reply = call(

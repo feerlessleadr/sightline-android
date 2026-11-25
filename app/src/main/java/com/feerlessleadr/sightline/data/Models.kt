@@ -11,6 +11,20 @@ internal val BlueIrisJson = Json {
     coerceInputValues = true
 }
 
+/** A number Blue Iris sometimes sends as text (`"4096"`); anything else that is not a number reads as missing. */
+internal object LenientDouble : kotlinx.serialization.KSerializer<Double?> {
+    override val descriptor = kotlinx.serialization.descriptors.PrimitiveSerialDescriptor("LenientDouble", kotlinx.serialization.descriptors.PrimitiveKind.STRING)
+
+    override fun deserialize(decoder: kotlinx.serialization.encoding.Decoder): Double? {
+        val element = (decoder as? kotlinx.serialization.json.JsonDecoder)?.decodeJsonElement() as? kotlinx.serialization.json.JsonPrimitive
+        return element?.content?.toDoubleOrNull()
+    }
+
+    override fun serialize(encoder: kotlinx.serialization.encoding.Encoder, value: Double?) {
+        if (value == null) encoder.encodeNull() else encoder.encodeDouble(value)
+    }
+}
+
 /** The envelope around every Blue Iris JSON reply. */
 @Serializable
 internal data class Envelope(
@@ -46,6 +60,8 @@ data class Camera(
     val ptz: Boolean = false,
     /** Frames per second Blue Iris reports for the camera (`FPS`); used for frame step. */
     @SerialName("FPS") val fps: Double? = null,
+    /** Bytes a second Blue Iris records for the camera (`BPS`, sometimes sent as text); used to estimate download sizes. */
+    @SerialName("BPS") @Serializable(with = LenientDouble::class) val bps: Double? = null,
     val webcast: Boolean? = null,
     val width: Int? = null,
     val height: Int? = null,

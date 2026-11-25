@@ -79,7 +79,10 @@ import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.rememberUpdatedState
 import com.feerlessleadr.sightline.video.GroupLayout
+import androidx.compose.foundation.layout.PaddingValues
+import com.feerlessleadr.sightline.data.ClipRange
 import com.feerlessleadr.sightline.data.Exports
+import androidx.compose.ui.text.style.TextAlign
 import com.feerlessleadr.sightline.data.ExportOptions
 import androidx.compose.material3.LinearProgressIndicator
 import com.feerlessleadr.sightline.data.AlertFlags
@@ -197,6 +200,7 @@ fun PlayerScreen(
     onExportOptions: (ExportOptions) -> Unit,
     download: DownloadState?,
     onDownloadAlert: (AlertItem, String) -> Unit,
+    onDownloadRange: (camera: String, cameraName: String, range: ClipRange, own: AlertItem?) -> Unit,
     onCancelDownload: () -> Unit,
     onDismissDownload: () -> Unit,
     onQuality: (VideoQuality) -> Unit,
@@ -249,6 +253,10 @@ fun PlayerScreen(
     var flagOverrides by remember { mutableStateOf<Map<String, Long>>(emptyMap()) }
     var showMark by remember { mutableStateOf(false) }
     var showDownload by remember { mutableStateOf(false) }
+    // Choosing the start and end of a download on the timeline (the stretch, and the alert it began from, if any).
+    var trim by remember(id) { mutableStateOf<ClipRange?>(null) }
+    var trimOwn by remember(id) { mutableStateOf<AlertItem?>(null) }
+    var showRangeDownload by remember { mutableStateOf(false) }
     var markBusy by remember { mutableStateOf(false) }
     var markMessage by remember { mutableStateOf<String?>(null) }
     fun flagsOf(a: AlertItem): Long = flagOverrides[AlertFlags.recordId(a.path)] ?: a.flags
@@ -427,6 +435,25 @@ fun PlayerScreen(
         }
         val target = TimelineMath.stepTarget(pos, direction, TimelineMath.frameIntervalMs(if (camera.isGroup) 30.0 else camera.fps), now()) ?: return
         seek(target)
+    }
+
+    /** Where "set start/end here" takes its time from: the playhead, or the newest recorded moment when live. */
+    fun trimHere(): Long = if (live) TimelineMath.latestPlayable(now()) else pos
+
+    /** Starts choosing a download range: the whole [alert], or the minute before the playhead (before now, when live). */
+    fun startTrim(alert: AlertItem?) {
+        val range = if (alert != null) Exports.wholeRange(alert).let { ClipRange(it.first, it.last) } else ClipRange.lastMinute(trimHere())
+        trimOwn = alert
+        trim = range
+        if (live) enterRecording(range.startMs, false)
+        if (range.startMs < window.start || range.endMs > window.end) {
+            window = TimelineMath.centered((range.startMs + range.endMs) / 2, window.length, now())
+        }
+    }
+
+    fun changeTrim(change: ClipRange.Change) {
+        trim = change.range
+        change.message?.let { note = it }
     }
 
     fun togglePlay() {
@@ -839,6 +866,9 @@ fun PlayerScreen(
         IconAction(Glyph.Boxes, if (motionBoxes) "Motion boxes on" else "Motion boxes off", tint = if (motionBoxes) Sl.Accent else Sl.Text) {
             onMotionBoxes(!motionBoxes)
         }
+    }
+    val downloadButton: @Composable () -> Unit = {
+        if (!camera.isGroup) IconAction(Glyph.Download, "Download a clip", tint = if (trim != null) Sl.Accent else Sl.Text) { if (trim == null) startTrim(null) else trim = null }
     }
     val qualityButton: @Composable () -> Unit = {
         TextButton(onClick = { pickQuality = true }) { Text(quality.label.uppercase()) }
@@ -1255,7 +1285,19 @@ fun PlayerScreen(
             },
             onZoom = { factor, anchor -> window = TimelineMath.zoomed(window, factor, anchor, now()) },
             modifier = Modifier.padding(horizontal = 12.dp),
+            selection = trim?.let { it.startMs..it.endMs },
         )
+        trim?.let { t ->
+            TrimPanel(
+                range = t,
+                bytesPerSecond = camera.bps,
+                onSetStart = { changeTrim(t.withStart(trimHere(), TimelineMath.latestPlayable(now()))) },
+                onSetEnd = { changeTrim(t.withEnd(trimHere())) },
+                onSeek = { seek(it) },
+                onCancel = { trim = null; trimOwn = null },
+                onDownload = { showRangeDownload = true },
+            )
+        }
         timelineNote?.let {
             Text(
                 if (it.contains("denied", true) || it.contains("fail", true)) "Rewinding needs a newer Blue Iris, or this account may not rewind. ($it)" else it,
@@ -1357,6 +1399,7 @@ fun PlayerScreen(
                     Spacer(Modifier.weight(1f))
                     groupButton()
                     boxesButton()
+                    downloadButton()
                     soundButton()
                     fullScreenButton()
                     qualityButton()
@@ -1388,6 +1431,7 @@ fun PlayerScreen(
                     actions = {
                         groupButton()
                         boxesButton()
+                        downloadButton()
                     soundButton()
                         fullScreenButton()
                         qualityButton()
@@ -1430,9 +1474,12 @@ fun PlayerScreen(
     }
     if (showDownload) {
         alertItem?.let { a ->
+            val whole = Exports.wholeRange(a)
             DownloadSheet(
+                title = "Download this alert",
                 cameraName = camera.displayName,
-                alert = a,
+                startMs = whole.first,
+                endMs = whole.last,
                 options = exportOptions,
                 onOptions = onExportOptions,
                 onDownload = {
@@ -1440,6 +1487,28 @@ fun PlayerScreen(
                     onDownloadAlert(a, camera.displayName)
                 },
                 onDismiss = { showDownload = false },
+                onChooseRange = { showDownload = false; startTrim(a) },
+            )
+        }
+    }
+    if (showRangeDownload) {
+        trim?.let { t ->
+            DownloadSheet(
+                title = "Download this clip",
+                cameraName = camera.displayName,
+                startMs = t.startMs,
+                endMs = t.endMs,
+                options = exportOptions,
+                onOptions = onExportOptions,
+                sizeText = ClipRange.sizeText(t.approximateBytes(camera.bps)),
+                onDownload = {
+                    showRangeDownload = false
+                    val own = trimOwn
+                    trim = null
+                    trimOwn = null
+                    onDownloadRange(id, camera.displayName, t, own)
+                },
+                onDismiss = { showRangeDownload = false },
             )
         }
     }
@@ -1463,6 +1532,47 @@ fun PlayerScreen(
         )
     }
 }
+
+/**
+ * Choosing what to download: the start and end times (tap one to look at that moment), how long and about how big, and
+ * buttons that take the start or end from where the playhead is. The chosen stretch is shaded on the timeline above.
+ */
+@Composable
+private fun TrimPanel(
+    range: ClipRange,
+    bytesPerSecond: Double?,
+    onSetStart: () -> Unit,
+    onSetEnd: () -> Unit,
+    onSeek: (Long) -> Unit,
+    onCancel: () -> Unit,
+    onDownload: () -> Unit,
+) {
+    val seconds = (range.lengthMs / 1000).coerceAtLeast(0)
+    val length = if (seconds >= 3600) "${seconds / 3600} h ${seconds % 3600 / 60} min" else "${seconds / 60}:${(seconds % 60).toString().padStart(2, '0')}"
+    val size = ClipRange.sizeText(range.approximateBytes(bytesPerSecond))
+    Column(Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 4.dp)) {
+        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            Pill(clockText(range.startMs), compact = true, accent = Sl.Accent) { onSeek(range.startMs) }
+            Text(
+                length + (if (size.isNotEmpty()) " · about $size" else ""),
+                color = Sl.Muted,
+                style = MaterialTheme.typography.bodySmall,
+                textAlign = TextAlign.Center,
+                modifier = Modifier.weight(1f),
+            )
+            Pill(clockText(range.endMs), compact = true, accent = Sl.Accent) { onSeek(range.endMs) }
+        }
+        Row(Modifier.fillMaxWidth().padding(top = 4.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            Pill("Set start here", compact = true, onClick = onSetStart)
+            Pill("Set end here", compact = true, onClick = onSetEnd)
+            Spacer(Modifier.weight(1f))
+            TextButton(onClick = onCancel) { Text("Cancel") }
+            Button(onClick = onDownload, contentPadding = PaddingValues(horizontal = 14.dp, vertical = 8.dp)) { Text("Download", maxLines = 1, softWrap = false) }
+        }
+    }
+}
+
+private fun clockText(ms: Long): String = SimpleDateFormat("h:mm:ss a", Locale.getDefault()).format(java.util.Date(ms))
 
 private fun formatWhen(ms: Long): String = SimpleDateFormat("EEE MMM d, h:mm:ss a", Locale.getDefault()).format(java.util.Date(ms))
 

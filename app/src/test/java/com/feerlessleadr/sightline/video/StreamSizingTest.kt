@@ -60,6 +60,21 @@ class StreamSizingTest {
         assertEquals(listOf(name), layout!!.cams)
     }
 
+    @Test fun `the sequence parameter set is found, so a change of picture size can be seen`() {
+        val h264 = byteArrayOf(0, 0, 0, 1, 0x67, 1, 2, 0, 0, 1, 0x68, 5, 0, 0, 1, 0x65, 9, 9)
+        assertArrayEquals(byteArrayOf(0x67, 1, 2), sequenceParameterSet(h264, hevc = false))
+        val atEnd = byteArrayOf(0, 0, 0, 1, 0x67, 1, 2)
+        assertArrayEquals(byteArrayOf(0x67, 1, 2), sequenceParameterSet(atEnd, hevc = false))
+        val h265 = byteArrayOf(0, 0, 0, 1, 0x40, 1, 7, 0, 0, 0, 1, 0x42, 1, 5, 6, 0, 0, 1, 0x26, 1)
+        assertArrayEquals(byteArrayOf(0x42, 1, 5, 6), sequenceParameterSet(h265, hevc = true))
+        assertNull(sequenceParameterSet(byteArrayOf(0, 0, 0, 1, 0x41, 9, 9), hevc = false))
+        assertNull(sequenceParameterSet(byteArrayOf(1, 2, 3), hevc = true))
+        // Two different sets differ, the same one twice does not.
+        val bigger = byteArrayOf(0, 0, 0, 1, 0x67, 1, 3, 0, 0, 1, 0x65, 9)
+        assertFalse(sequenceParameterSet(h264, false)!!.contentEquals(sequenceParameterSet(bigger, false)!!))
+        assertTrue(sequenceParameterSet(h264, false)!!.contentEquals(sequenceParameterSet(h264.copyOf(), false)!!))
+    }
+
     @Test fun `key frames are found in H264 and H265 access units`() {
         val idr = byteArrayOf(0, 0, 0, 1, 0x67, 1, 2, 0, 0, 1, 0x65, 9, 9) // SPS then IDR slice
         val pFrame = byteArrayOf(0, 0, 0, 1, 0x41, 9, 9)

@@ -16,7 +16,7 @@ Status: **Done**, **Partial**, **Planned (Mn)**, **N/A** (with the reason). "And
 | Web feature | Status |
 |---|---|
 | Dark theme only. Colours: background `#0b0d10`, surface `#14181d` / `#1c2229`, line `#262e38`, text `#e8edf2`, muted `#8b97a5`, faint `#5d6875`, accent `#4cc2ff`, live red `#ff4d4d`; alert colours person `#ffb547`, vehicle `#5aa9ff`, animal `#7bd88f`, delivery `#c792ea`, motion `#9aa5b1` | Done (M2 round 2) |
-| Header: Sightline logo (blue ring, white centre), "Sightline for Blue Iris" tag above the server name, full-screen, refresh and menu buttons | Done (M2 round 2) |
+| Header: Sightline logo (blue ring, white centre), "Sightline for Blue Iris" tag above the server name, full-screen and menu buttons (refresh is pull-down on the camera grid instead of a button) | Done (M2 round 2, changed 2026-11-25) |
 | Bottom tab bar: Live, Alerts | Done: bar built; the Alerts tab is a placeholder until M4 |
 | Bottom sheets for every popup, system Back closes popups then the player | Done for choice popups (M2 round 2); player popups in M3 |
 | Sign-in card with logo, username, password, "Stay signed in" checkbox | Done: restyled card (M2 round 2); "Stay signed in" is our fingerprint/PIN "Remember me" (Android) |
@@ -68,12 +68,12 @@ Status: **Done**, **Partial**, **Planned (Mn)**, **N/A** (with the reason). "And
 | Motion boxes in the player with sensitivity | Done (M3: boxes button; sensitivity in Settings) |
 | Rewind without Blue Iris's timeline (older 5.x): clip-list fallback, "Rewinding needs a newer Blue Iris" | Planned (M3) |
 | Alerts play from their recording file, carry on from the timeline outside it | Done (M3; falls back to the timeline if the file cannot be opened) |
-| Restart at new size if a recording changes picture size | Planned (M3) |
+| Restart at new size if a recording changes picture size | Built (M3), needs a real size change to confirm |
 | Keeps the screen awake while the player is open (wake lock, found in the source only) | Done (M3 stage 1) |
 | Short haptic buzz on long-press actions (found in the source only) | Done (M2 round 2) |
 | Troubleshooting switches `?grpdebug=1` (outline each camera on the group picture) and `?cliprewind=0/1` (force clip-list rewinding) | Planned (M6): hidden developer options |
 | Flag / protect an alert (`update` command), flags shown, "Flagged" filter; clear message without permission | Player done (M3: chip and sheet); list icons and Flagged filter with the alerts tab (M4) |
-| Download alert or any range as MP4 (export): re-encode H.264 (default) or original, encoder profile 0 to 3, overlay, audio, choose start/end by draggable handles or set-at-playhead, up to 2 h, size estimate, progress, cancel, readable file name, permission message | Step 1 done (M3: whole alert, options, progress, cancel, saved to Downloads); choosing a start and end next; list entry with the alerts tab (M4) |
+| Download alert or any range as MP4 (export): re-encode H.264 (default) or original, encoder profile 0 to 3, overlay, audio, choose start/end by draggable handles or set-at-playhead, up to 2 h, size estimate, progress, cancel, readable file name, permission message | Done (M3): whole alert, options, progress, cancel, saved to Downloads, and a range chosen on the timeline (set start/end at the playhead, shaded band, up to 2 h, size estimate); handle dragging not done (the buttons set the ends); list entry with the alerts tab (M4) |
 | Link to open full Blue Iris UI (UI3) | Planned (M5): opens in the browser |
 
 ## Alerts

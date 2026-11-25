@@ -53,7 +53,7 @@ fun SlLogo(size: Dp = 28.dp) {
     }
 }
 
-enum class Glyph { Refresh, FullScreen, ExitFullScreen, Menu, Live, Alerts, Play, Pause, PrevAlert, NextAlert, Calendar, Sound, Muted, FrameBack, FrameForward, Boxes, Group, Flag, FlagOn, Lock }
+enum class Glyph { Refresh, FullScreen, ExitFullScreen, Menu, Live, Alerts, Play, Pause, PrevAlert, NextAlert, Calendar, Sound, Muted, FrameBack, FrameForward, Boxes, Group, Flag, FlagOn, Lock, Download }
 
 /** Small line icons drawn by hand, so the app needs no icon library. */
 @Composable
@@ -99,6 +99,11 @@ fun GlyphIcon(glyph: Glyph, color: Color, size: Dp = 22.dp) {
                 }
                 if (glyph == Glyph.FlagOn) drawPath(flag, color) else drawPath(flag, color, style = st)
                 drawLine(color, Offset(s * 0.21f, s * 0.17f), Offset(s * 0.21f, s * 0.88f), strokeWidth = w, cap = StrokeCap.Round)
+            }
+            Glyph.Download -> {
+                drawLine(color, Offset(s * 0.5f, s * 0.14f), Offset(s * 0.5f, s * 0.62f), strokeWidth = w, cap = StrokeCap.Round)
+                drawPath(Path().apply { moveTo(s * 0.30f, s * 0.44f); lineTo(s * 0.5f, s * 0.64f); lineTo(s * 0.70f, s * 0.44f) }, color, style = st)
+                drawPath(Path().apply { moveTo(s * 0.18f, s * 0.70f); lineTo(s * 0.18f, s * 0.84f); lineTo(s * 0.82f, s * 0.84f); lineTo(s * 0.82f, s * 0.70f) }, color, style = st)
             }
             Glyph.Lock -> {
                 drawRoundRect(color, Offset(s * 0.21f, s * 0.46f), Size(s * 0.58f, s * 0.42f), CornerRadius(s * 0.06f), style = st)
@@ -190,7 +195,7 @@ fun IconAction(glyph: Glyph, label: String, tint: Color = Sl.Text, onClick: () -
 
 /** Logo, the "Sightline for Blue Iris" tag above the server name, and the header buttons. */
 @Composable
-fun SightlineHeader(serverName: String, onFullScreen: () -> Unit, onRefresh: () -> Unit, onMenu: () -> Unit) {
+fun SightlineHeader(serverName: String, onFullScreen: () -> Unit, onMenu: () -> Unit) {
     Row(
         Modifier
             .fillMaxWidth()
@@ -206,7 +211,6 @@ fun SightlineHeader(serverName: String, onFullScreen: () -> Unit, onRefresh: () 
             Text(serverName, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold, maxLines = 1)
         }
         IconAction(Glyph.FullScreen, "Full screen", onClick = onFullScreen)
-        IconAction(Glyph.Refresh, "Refresh", onClick = onRefresh)
         IconAction(Glyph.Menu, "Menu", onClick = onMenu)
     }
     Box(Modifier.fillMaxWidth().height(1.dp).background(Sl.Line))

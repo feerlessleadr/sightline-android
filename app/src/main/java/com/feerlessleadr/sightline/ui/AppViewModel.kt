@@ -6,6 +6,11 @@ import com.feerlessleadr.sightline.data.Exports
 import com.feerlessleadr.sightline.data.ExportStart
 import com.feerlessleadr.sightline.data.ExportOptions
 import com.feerlessleadr.sightline.data.ExportQueue
+import com.feerlessleadr.sightline.data.ExportRequest
+import com.feerlessleadr.sightline.data.ClipRange
+import com.feerlessleadr.sightline.data.RecordingFile
+import com.feerlessleadr.sightline.data.RecordingFiles
+import com.feerlessleadr.sightline.data.AlertClips
 import kotlin.math.roundToInt
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.CancellationException
@@ -77,6 +82,9 @@ data class SessionState(
     val export: ExportOptions = ExportOptions(),
     /** The download being made or just finished (shown over the player); null when there is none. */
     val download: DownloadState? = null,
+    /** A folder the owner chose for downloads (a tree address from the phone's folder picker), or null for the Downloads folder. */
+    val downloadFolder: String? = null,
+    val downloadFolderName: String? = null,
     /** Sound in the player (on or muted) and its volume, 0 to 2 (1 is normal). */
     val soundOn: Boolean = true,
     val volume: Float = 1f,
@@ -306,6 +314,12 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     // ---- locking ----
 
     private var awaySince = 0L
+    private var pickerOpenedAt = 0L
+
+    /** The app is about to open the phone's folder picker: coming back from it must not lock the app. */
+    fun openingPicker() {
+        pickerOpenedAt = System.currentTimeMillis()
+    }
 
     /**
      * The app left the foreground: remember when, so coming back can be judged against the lock time. A screen
@@ -323,6 +337,12 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         inForeground = true
         val left = awaySince
         awaySince = 0L
+        // Coming back from a system screen the app opened itself (the folder picker) is not leaving the app.
+        if (pickerOpenedAt > 0L && System.currentTimeMillis() - pickerOpenedAt < 10 * 60_000L) {
+            pickerOpenedAt = 0L
+            return
+        }
+        pickerOpenedAt = 0L
         if (left == 0L || _state.value.session == null || !store.hasSaved) return
         if (!LockPolicy.stillUnlocked(lockAfter, left, System.currentTimeMillis())) lockNow()
     }
@@ -492,6 +512,8 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
             audio = prefs.getBoolean(KEY_EXPORT_AUDIO, true),
             overlay = prefs.getBoolean(KEY_EXPORT_OVERLAY, true),
         ),
+        downloadFolder = prefs.getString(KEY_DOWNLOAD_FOLDER, null),
+        downloadFolderName = prefs.getString(KEY_DOWNLOAD_FOLDER, null)?.let { folderName(android.net.Uri.parse(it)) },
         soundOn = prefs.getBoolean(KEY_SOUND_ON, true),
         volume = prefs.getFloat(KEY_VOLUME, 1f).coerceIn(0f, 2f),
         motionSensitivity = prefs.getInt(KEY_MOTION_SENS, 5).coerceIn(1, 10),
@@ -678,6 +700,34 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         if (downloadJob?.isActive != true) setDownload(null)
     }
 
+    private val folderFlags = android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION or android.content.Intent.FLAG_GRANT_WRITE_URI_PERMISSION
+
+    /** The name of a folder picked with the phone's folder picker, for showing in Settings. */
+    private fun folderName(tree: android.net.Uri): String = runCatching {
+        val doc = android.provider.DocumentsContract.buildDocumentUriUsingTree(tree, android.provider.DocumentsContract.getTreeDocumentId(tree))
+        getApplication<Application>().contentResolver.query(doc, arrayOf(android.provider.DocumentsContract.Document.COLUMN_DISPLAY_NAME), null, null, null)
+            ?.use { if (it.moveToFirst()) it.getString(0) else null }
+    }.getOrNull() ?: "Chosen folder"
+
+    /** Saves downloads in [tree] (a folder the owner picked; the app keeps permission to it) or, when null, in the Downloads folder. */
+    fun setDownloadFolder(tree: android.net.Uri?) {
+        val resolver = getApplication<Application>().contentResolver
+        val old = prefs.getString(KEY_DOWNLOAD_FOLDER, null)
+        if (tree != null) runCatching { resolver.takePersistableUriPermission(tree, folderFlags) }
+        if (old != null && old != tree?.toString()) runCatching { resolver.releasePersistableUriPermission(android.net.Uri.parse(old), folderFlags) }
+        prefs.edit().apply { if (tree == null) remove(KEY_DOWNLOAD_FOLDER) else putString(KEY_DOWNLOAD_FOLDER, tree.toString()) }.apply()
+        _state.update { s ->
+            s.session?.let { s.copy(session = it.copy(downloadFolder = tree?.toString(), downloadFolderName = tree?.let { t -> folderName(t) })) } ?: s
+        }
+    }
+
+    /** Says what is wrong when the chosen download folder can no longer be written to (checked before Blue Iris is asked to make anything). */
+    private fun folderProblem(): String? {
+        val tree = _state.value.session?.downloadFolder ?: return null
+        val granted = getApplication<Application>().contentResolver.persistedUriPermissions.any { it.uri.toString() == tree && it.isWritePermission }
+        return if (granted) null else "The download folder you chose is no longer available. Choose it again in Settings, or go back to the Downloads folder."
+    }
+
     /** Remembers how exports should be made (re-encode or original, encoder profile, overlay, audio). */
     fun setExportOptions(options: ExportOptions) {
         prefs.edit()
@@ -694,14 +744,72 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
      * it in the phone's Downloads folder. It carries on if the player is closed; signing out or locking stops it.
      */
     fun startAlertDownload(alert: AlertItem, cameraName: String) {
-        if (downloadJob?.isActive == true) return
         val session = _state.value.session ?: return
-        val current = client ?: return
         val request = Exports.forAlert(alert, session.export)
-        val name = Exports.fileName(cameraName, alert.timeMs)
+        launchDownload(Exports.fileName(cameraName, alert.timeMs)) { request to null }
+    }
+
+    /**
+     * Downloads the part of a camera's recordings in [range] (the owner chose its start and end on the timeline). The
+     * recording file holding the start is found from Blue Iris's list of recordings, unless [own] (the alert being
+     * watched) already holds it; a range reaching past the end of that file is shortened, and the owner is told.
+     */
+    fun startRangeDownload(camera: String, cameraName: String, range: ClipRange, own: AlertItem?) {
+        val current = client ?: return
+        val name = Exports.fileName(cameraName, range.startMs)
+        launchDownload(name) {
+            val options = _state.value.session?.export ?: ExportOptions()
+            val ownFile = own?.takeIf { Exports.canExport(it) }?.let { RecordingFile(it.clip, it.timeMs - it.offsetMs, Long.MAX_VALUE) }
+            val ownHoldsStart = ownFile != null && own != null &&
+                range.startMs >= ownFile.startMs && range.startMs <= own.timeMs + AlertClips.durationMillis(own.fileSize)
+            var file = if (ownHoldsStart) ownFile else null
+            var listed = true
+            if (file == null) {
+                setDownload(DownloadState("Finding the recording…", null, name))
+                val files = try {
+                    current.recordingFiles(camera, range.startMs - 60_000L, minOf(range.endMs + 60_000L, System.currentTimeMillis()))
+                } catch (e: SessionExpiredException) {
+                    throw e
+                } catch (e: BlueIrisException) {
+                    listed = false
+                    emptyList()
+                }
+                file = RecordingFiles.find(files, range.startMs)
+                // An older Blue Iris that will not list recordings can still export from the alert's own file.
+                if (file == null && ownFile != null && range.startMs >= ownFile.startMs) file = ownFile
+            }
+            if (file == null) {
+                val at = java.text.SimpleDateFormat("h:mm:ss a", java.util.Locale.getDefault()).format(java.util.Date(range.startMs))
+                throw BlueIrisException(
+                    if (listed) "Blue Iris has no recording at $at."
+                    else "This Blue Iris can only download from the alert's own recording" + (ownFile?.let { ", which starts at " + java.text.SimpleDateFormat("h:mm:ss a", java.util.Locale.getDefault()).format(java.util.Date(it.startMs)) } ?: "") + ".",
+                )
+            }
+            val cut = Exports.forRange(file, range, options)
+            val note = if (cut.shortened) {
+                "it stops at " + java.text.SimpleDateFormat("h:mm:ss a", java.util.Locale.getDefault()).format(java.util.Date(cut.range.endMs)) + ", where that recording file ends"
+            } else {
+                null
+            }
+            cut.request to note
+        }
+    }
+
+    /** Runs one download: [prepare] says what to export (and a note for the end of the message), then Blue Iris makes it and the phone saves it. */
+    private fun launchDownload(name: String, prepare: suspend () -> Pair<ExportRequest, String?>) {
+        if (downloadJob?.isActive == true) return
+        val current = client ?: return
+        folderProblem()?.let {
+            setDownload(DownloadState(it, null, name, finished = true, failed = true))
+            return
+        }
         downloadJob = viewModelScope.launch {
             var jobPath = ""
+            var note: String? = null
             try {
+                setDownload(DownloadState("Asking Blue Iris to prepare the clip…", null, name))
+                val (request, extra) = prepare()
+                note = extra
                 setDownload(DownloadState("Asking Blue Iris to prepare the clip…", null, name))
                 // What is already queued, so that our own job can be told apart if Blue Iris names it differently.
                 val before = try { current.exportQueue().map { ExportQueue.keyOf(it) }.toSet() } catch (e: BlueIrisException) { emptySet() }
@@ -722,7 +830,8 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
                         delay(2_000)
                     }
                 }
-                setDownload(DownloadState("Saved to Downloads: $name", 100, name, finished = true))
+                val where = _state.value.session?.downloadFolderName ?: "Downloads"
+                setDownload(DownloadState("Saved to $where: $name" + (note?.let { " ($it)" } ?: ""), 100, name, finished = true))
             } catch (e: CancellationException) {
                 withContext(NonCancellable) { setDownload(DownloadState(cancelExport(current, jobPath), null, name, finished = true)) }
                 throw e
@@ -815,6 +924,11 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     /** Copies the finished clip from Blue Iris into the Downloads folder (no storage permission needed on Android 10 and later). */
     private suspend fun saveExport(current: BlueIrisClient, uri: String, name: String) {
         val resolver = getApplication<Application>().contentResolver
+        val tree = _state.value.session?.downloadFolder?.let { android.net.Uri.parse(it) }
+        if (tree != null) saveToFolder(resolver, tree, current, uri, name) else saveToDownloads(resolver, current, uri, name)
+    }
+
+    private suspend fun saveToDownloads(resolver: android.content.ContentResolver, current: BlueIrisClient, uri: String, name: String) {
         val values = ContentValues().apply {
             put(MediaStore.Downloads.DISPLAY_NAME, name)
             put(MediaStore.Downloads.MIME_TYPE, "video/mp4")
@@ -824,26 +938,47 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
             ?: throw BlueIrisException("This phone would not let the app save to Downloads.")
         try {
             val out = resolver.openOutputStream(target) ?: throw BlueIrisException("This phone would not let the app save to Downloads.")
-            var lastPercent = -2
-            var lastAt = 0L
-            out.use { stream ->
-                current.downloadExport(uri, stream) { done, total ->
-                    val percent = if (total > 0) (done * 100 / total).toInt() else -1
-                    val at = SystemClock.elapsedRealtime()
-                    if (percent != lastPercent && at - lastAt > 250) {
-                        lastPercent = percent
-                        lastAt = at
-                        val megabytes = done / 1_000_000
-                        setDownload(DownloadState(if (percent >= 0) "Downloading… $percent% ($megabytes MB)" else "Downloading… $megabytes MB", percent.takeIf { it >= 0 }, name))
-                    }
-                }
-            }
+            out.use { stream -> fetchInto(current, uri, name, stream) }
             values.clear()
             values.put(MediaStore.Downloads.IS_PENDING, 0)
             resolver.update(target, values, null, null)
         } catch (e: Throwable) {
             runCatching { resolver.delete(target, null, null) } // never leave half a file behind
             throw e
+        }
+    }
+
+    /** Saves into the folder the owner chose; the folder's provider renames the file if the name is already taken. */
+    private suspend fun saveToFolder(resolver: android.content.ContentResolver, tree: android.net.Uri, current: BlueIrisClient, uri: String, name: String) {
+        val problem = "This phone would not let the app save to the folder you chose. Choose it again in Settings."
+        val parent = android.provider.DocumentsContract.buildDocumentUriUsingTree(tree, android.provider.DocumentsContract.getTreeDocumentId(tree))
+        val target = try {
+            android.provider.DocumentsContract.createDocument(resolver, parent, "video/mp4", name)
+        } catch (e: Exception) {
+            null
+        } ?: throw BlueIrisException(problem)
+        try {
+            val out = resolver.openOutputStream(target) ?: throw BlueIrisException(problem)
+            out.use { stream -> fetchInto(current, uri, name, stream) }
+        } catch (e: Throwable) {
+            runCatching { android.provider.DocumentsContract.deleteDocument(resolver, target) } // never leave half a file behind
+            throw e
+        }
+    }
+
+    /** Copies the finished clip from Blue Iris into [stream], showing the progress. */
+    private suspend fun fetchInto(current: BlueIrisClient, uri: String, name: String, stream: java.io.OutputStream) {
+        var lastPercent = -2
+        var lastAt = 0L
+        current.downloadExport(uri, stream) { done, total ->
+            val percent = if (total > 0) (done * 100 / total).toInt() else -1
+            val at = SystemClock.elapsedRealtime()
+            if (percent != lastPercent && at - lastAt > 250) {
+                lastPercent = percent
+                lastAt = at
+                val megabytes = done / 1_000_000
+                setDownload(DownloadState(if (percent >= 0) "Downloading… $percent% ($megabytes MB)" else "Downloading… $megabytes MB", percent.takeIf { it >= 0 }, name))
+            }
         }
     }
 
@@ -933,6 +1068,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         const val KEY_AI_LABELS = "ai_labels"
         const val KEY_MOTION_BOXES = "motion_boxes"
         const val KEY_SOUND_ON = "sound_on"
+        const val KEY_DOWNLOAD_FOLDER = "download_folder"
         const val KEY_EXPORT_REENCODE = "export_reencode"
         const val KEY_EXPORT_PROFILE = "export_profile"
         const val KEY_EXPORT_AUDIO = "export_audio"

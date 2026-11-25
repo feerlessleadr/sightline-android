@@ -116,3 +116,9 @@ This is why MediaCodec is the leading decoder choice: parse these blocks, feed a
 - Queue: `{cmd:"export"}` -> array of `{path, uri, status: "done"|"error"|"active"|other (waiting), progress}`; poll about every 1.5 s.
 - Cancel: `{cmd:"export", path, delete:true}` (Blue Iris 6; older versions cannot stop an export).
 - File: `GET /clips/<uri>` (the web app adds the session to the address; the app uses the cookie).
+
+## Choosing a range to download (2026-11-25)
+- `cliplist` (`camera`, `startdate`, `enddate`, `view: "all"`; asked again without `view` if refused) lists recording files: `path` ending `.bvr`, `date` (s), `msec` or a `filesize` text. Alert entries carry a `clip` field and are skipped. The app asks from 36 h before the start, because a long file may still cover it.
+- A file still being written when listed (it ended less than 2 min ago) has no end yet; the export is not cut short for it.
+- `export` is cut from one file: `path` = that file, `startms` = start minus the file's start, `msec` = length. Blue Iris will not span two files, so a longer range stops at the file's end.
+- `camlist` `BPS` (bytes a second, sometimes text) gives the size estimate.

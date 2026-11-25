@@ -343,6 +343,27 @@ class BlueIrisClientTest {
         assertEquals("25000", body["msec"]!!.jsonPrimitive.content)
     }
 
+    @Test fun `recording files are listed from a day and a half earlier`() = runBlocking {
+        signedInClient()
+        reply("""{"result":"success","data":[{"path":"@5.bvr","date":1000000,"msec":60000}]}""")
+        val files = client.recordingFiles("Cam1", 2_000_000_000L, 2_000_100_000L)
+        assertEquals(listOf("@5.bvr"), files.map { it.path })
+        val body = Json.parseToJsonElement(server.takeRequest().body.readUtf8()).jsonObject
+        assertEquals("cliplist", body["cmd"]!!.jsonPrimitive.content)
+        assertEquals("Cam1", body["camera"]!!.jsonPrimitive.content)
+        assertEquals((2_000_000L - 36 * 3600).toString(), body["startdate"]!!.jsonPrimitive.content)
+        assertEquals("all", body["view"]!!.jsonPrimitive.content)
+    }
+
+    @Test fun `a Blue Iris that does not know the view option is asked again without it`() = runBlocking {
+        signedInClient()
+        reply("""{"result":"fail","data":{"reason":"unknown option"}}""")
+        reply("""{"result":"success","data":[{"path":"@5.bvr","date":1000000,"msec":60000}]}""")
+        assertEquals(1, client.recordingFiles("Cam1", 2_000_000_000L, 2_000_100_000L).size)
+        assertTrue(server.takeRequest().body.readUtf8().contains("\"view\""))
+        assertFalse(server.takeRequest().body.readUtf8().contains("\"view\""))
+    }
+
     @Test fun `a refused export explains itself`() = runBlocking {
         signedInClient()
         reply("""{"result":"fail","data":{"reason":"Access denied"}}""")

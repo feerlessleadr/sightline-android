@@ -161,6 +161,34 @@ data class GroupLayout(val cams: List<String>, val rects: List<List<Int>>, val w
     }
 }
 
+/**
+ * The sequence parameter set of [data] (an Annex-B access unit): H.264 NAL type 7, H.265 type 33, without its start
+ * code; null if there is none. It carries the picture size, so a change in it means the picture size changed.
+ */
+fun sequenceParameterSet(data: ByteArray, hevc: Boolean): ByteArray? {
+    var i = 0
+    while (i + 3 < data.size) {
+        if (data[i].toInt() == 0 && data[i + 1].toInt() == 0 &&
+            (data[i + 2].toInt() == 1 || (data[i + 2].toInt() == 0 && data[i + 3].toInt() == 1))
+        ) {
+            val nal = if (data[i + 2].toInt() == 1) i + 3 else i + 4
+            if (nal >= data.size) return null
+            val b = data[nal].toInt() and 0xFF
+            val type = if (hevc) (b shr 1) and 0x3F else b and 0x1F
+            if (type == (if (hevc) 33 else 7)) {
+                var end = nal + 1
+                while (end + 2 < data.size && !(data[end].toInt() == 0 && data[end + 1].toInt() == 0 && (data[end + 2].toInt() == 1 || data[end + 2].toInt() == 0))) end++
+                if (end + 2 >= data.size) end = data.size
+                return data.copyOfRange(nal, end)
+            }
+            i = nal
+        } else {
+            i++
+        }
+    }
+    return null
+}
+
 /** True if [data] (an Annex-B access unit) holds a key frame: H.264 IDR slice, or H.265 IRAP picture. */
 fun isKeyFrame(data: ByteArray, hevc: Boolean): Boolean {
     var i = 0

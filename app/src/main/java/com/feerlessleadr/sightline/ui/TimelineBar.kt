@@ -64,6 +64,7 @@ fun TimelineBar(
     onScrubEnd: () -> Unit,
     onZoom: (factor: Float, anchor: Long) -> Unit,
     modifier: Modifier = Modifier,
+    selection: LongRange? = null,
 ) {
     val measurer = rememberTextMeasurer()
     val marks = remember(timeline, alerts) { timeline.alerts.map { it to markClass(it, alerts) } }
@@ -128,6 +129,16 @@ fun TimelineBar(
             if (x2 < 0f || x1 > w) continue
             val left = x1.coerceAtLeast(0f)
             drawRect(classColor(cls), Offset(left, trackTop + 4.dp.toPx()), Size(max(3.dp.toPx(), minOf(x2, w) - left), trackHeight - 8.dp.toPx()))
+        }
+        // The stretch chosen for download: a tinted band with a bar at each end.
+        if (selection != null) {
+            val x1 = x(selection.first).coerceIn(0f, w)
+            val x2 = x(selection.last).coerceIn(0f, w)
+            if (x2 > x1) drawRect(Sl.Accent.copy(alpha = 0.35f), Offset(x1, trackTop), Size(x2 - x1, trackHeight))
+            for (edge in listOf(selection.first, selection.last)) {
+                val ex = x(edge)
+                if (ex in 0f..w) drawRect(Sl.Accent, Offset(ex - 1.5.dp.toPx(), trackTop - 2.dp.toPx()), Size(3.dp.toPx(), trackHeight + 4.dp.toPx()))
+            }
         }
         // The future: nothing is recorded there.
         val xNow = x(nowMs)

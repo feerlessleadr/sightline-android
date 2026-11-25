@@ -54,6 +54,19 @@ object Exports {
         )
     }
 
+    /** An export cut from [file] for [range]: Blue Iris exports from one file at a time, so a range reaching past its end is shortened. */
+    data class RangeExport(val request: ExportRequest, val range: ClipRange, val shortened: Boolean)
+
+    fun forRange(file: RecordingFile, range: ClipRange, options: ExportOptions): RangeExport {
+        val end = if (!file.growing && range.endMs > file.endMs) file.endMs else range.endMs
+        val cut = ClipRange(range.startMs, end)
+        return RangeExport(
+            ExportRequest(file = file.path, startMs = cut.startMs - file.startMs, lengthMs = cut.lengthMs, options = options),
+            cut,
+            shortened = end != range.endMs,
+        )
+    }
+
     /** Camera name, date and time, like `IPC Kitchen 2026-11-25 1-23-05 PM.mp4`, with characters a file name cannot hold replaced. */
     fun fileName(camera: String, timeMs: Long, zone: ZoneId = ZoneId.systemDefault()): String {
         val t = Instant.ofEpochMilli(timeMs).atZone(zone)

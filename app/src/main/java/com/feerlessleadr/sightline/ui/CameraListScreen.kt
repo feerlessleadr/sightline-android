@@ -27,6 +27,11 @@ import com.feerlessleadr.sightline.data.mergeTags
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.pulltorefresh.PullToRefreshBox
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -71,13 +76,12 @@ fun CameraListScreen(
             SightlineHeader(
                 serverName = session.info.systemName ?: "Blue Iris",
                 onFullScreen = { tab = HomeTab.Live; fullScreen = true },
-                onRefresh = onRefresh,
                 onMenu = onSettings,
             )
         }
         Box(Modifier.weight(1f)) {
             when (tab) {
-                HomeTab.Live -> LiveTab(session, onSelectGroup, loadStill, openVideo, onOpenCamera, onTileSize, onArrangement, onResetLayout, onLiveVideo, onMotionBoxes, onPollStatus, onRecentAlerts, onSignInAgain, fullScreen)
+                HomeTab.Live -> LiveTab(session, onSelectGroup, onRefresh, loadStill, openVideo, onOpenCamera, onTileSize, onArrangement, onResetLayout, onLiveVideo, onMotionBoxes, onPollStatus, onRecentAlerts, onSignInAgain, fullScreen)
                 HomeTab.Alerts -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                     Text("Alerts are not built yet. They arrive in a later version.", color = Sl.Muted, modifier = Modifier.padding(24.dp))
                 }
@@ -87,10 +91,12 @@ fun CameraListScreen(
     }
 }
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun LiveTab(
     session: SessionState,
     onSelectGroup: (String?) -> Unit,
+    onRefresh: () -> Unit,
     loadStill: suspend (camera: String, width: Int) -> ByteArray?,
     openVideo: suspend (id: String, size: StreamRequest?) -> VideoStream,
     onOpenCamera: (Camera) -> Unit,
@@ -185,12 +191,25 @@ private fun LiveTab(
         session.error?.let {
             Text(it, color = Sl.Live, modifier = Modifier.padding(16.dp))
         }
-        Box(Modifier.fillMaxSize()) {
+        // Pull down from the top of the grid to reload the camera list from Blue Iris (shown for at least a moment).
+        var refreshing by remember { mutableStateOf(false) }
+        val loading by rememberUpdatedState(session.loading)
+        LaunchedEffect(refreshing) {
+            if (refreshing) {
+                delay(700)
+                while (loading) delay(100)
+                refreshing = false
+            }
+        }
+        PullToRefreshBox(isRefreshing = refreshing, onRefresh = { refreshing = true; onRefresh() }, modifier = Modifier.fillMaxSize()) {
             val cameras = list?.visibleCameras(selected).orEmpty()
             if (session.loading && list == null) {
                 CircularProgressIndicator(Modifier.align(Alignment.Center))
             } else if (cameras.isEmpty() && !session.loading) {
-                Text("No cameras to show.", color = Sl.Muted, modifier = Modifier.align(Alignment.Center))
+                // Scrollable, so that it can be pulled to refresh too.
+                Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState())) {
+                    Text("No cameras to show. Pull down to refresh.", color = Sl.Muted, modifier = Modifier.fillMaxWidth().padding(top = 96.dp, start = 24.dp, end = 24.dp), textAlign = TextAlign.Center)
+                }
             } else {
                 LiveGrid(
                     group = selected,

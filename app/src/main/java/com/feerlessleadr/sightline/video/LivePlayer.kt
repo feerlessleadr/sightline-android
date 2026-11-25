@@ -84,10 +84,21 @@ suspend fun playLive(
                 setInteger(MediaFormat.KEY_MAX_INPUT_SIZE, MAX_INPUT_BYTES)
                 setInteger(MediaFormat.KEY_LOW_LATENCY, 1)
             }
-            val decoder = MediaCodec.createDecoderByType(mime)
+            fun newDecoder(): MediaCodec {
+                val d = MediaCodec.createDecoderByType(mime)
+                d.configure(format, surface, null, 0)
+                d.start()
+                return d
+            }
+            var decoder = newDecoder()
             codec = decoder
-            decoder.configure(format, surface, null, 0)
-            decoder.start()
+            // Some cameras record a small picture until something happens and the full one after, so a recording can
+            // change picture size part-way. A changed sequence parameter set starts a fresh decoder (same connection,
+            // no gap), and the new picture size is reported from what the decoder says.
+            var lastSps: ByteArray? = null
+            var sizeMayChange = false
+            var shownWidth = header.width
+            var shownHeight = header.height
 
             val info = MediaCodec.BufferInfo()
             var frames = 0
@@ -131,6 +142,20 @@ suspend fun playLive(
                                 if (waitMs > 0) delay(waitMs)
                             }
                             if (t > 0) onFrameTime(t)
+                            if (key) {
+                                val sps = sequenceParameterSet(block.data, header.isHevc)
+                                if (sps != null) {
+                                    val before = lastSps
+                                    if (before != null && !before.contentEquals(sps)) {
+                                        runCatching { decoder.stop() }
+                                        runCatching { decoder.release() }
+                                        decoder = newDecoder()
+                                        codec = decoder
+                                        sizeMayChange = true
+                                    }
+                                    lastSps = sps
+                                }
+                            }
                             val index = decoder.dequeueInputBuffer(INPUT_WAIT_US)
                             // If the decoder is behind, drop this frame rather than building up delay.
                             if (index >= 0) {
@@ -146,7 +171,23 @@ suspend fun playLive(
                             while (true) {
                                 val out = decoder.dequeueOutputBuffer(info, 0)
                                 if (out == MediaCodec.INFO_TRY_AGAIN_LATER) break
-                                // A format change needs no action when rendering to a surface.
+                                if (out == MediaCodec.INFO_OUTPUT_FORMAT_CHANGED) {
+                                    // Only after a restart: at the start the header already gave the size (and a decoder may
+                                    // report a padded height).
+                                    if (sizeMayChange) {
+                                        val f = decoder.outputFormat
+                                        fun crop(lo: String, hi: String, plain: String): Int =
+                                            if (f.containsKey(lo) && f.containsKey(hi)) f.getInteger(hi) - f.getInteger(lo) + 1 else f.getInteger(plain)
+                                        val w = crop("crop-left", "crop-right", MediaFormat.KEY_WIDTH)
+                                        val h = crop("crop-top", "crop-bottom", MediaFormat.KEY_HEIGHT)
+                                        if (w > 0 && h > 0 && (w != shownWidth || h != shownHeight)) {
+                                            shownWidth = w
+                                            shownHeight = h
+                                            onSize(w, h)
+                                        }
+                                    }
+                                    continue
+                                }
                                 if (out >= 0) {
                                     decoder.releaseOutputBuffer(out, true)
                                     shown++

@@ -3,40 +3,25 @@
 Last updated: 2026-11-25
 
 ## Current state
-- Public repo feerlessleadr/sightline-android (secret scanning, push protection, private vulnerability reporting, Dependabot alerts, `main` ruleset). GPL-3.0, HTTPS-only, minSdk 30 (Android 11+). Last pushed commit: c15a207 (M2 complete). Everything under "M3 stage 1" is uncommitted.
-- M1 (sign-in, camera list) and M2 (live view: web look, tile layout, status borders and AI labels, big tiles, motion boxes, reconnect) done and owner-verified on a phone, including the reorder and Large-size fixes.
-- **M3 stage 1 (built, 76 unit tests pass, lint clean, NOT yet seen on a phone): recorded playback and timeline.** The old live-only screen is now `ui/PlayerScreen.kt` for live and recorded video:
-  - Recorded video from Blue Iris's `/time/` stream, paced by the frames' recording times (frame clock VERIFIED on a real capture); a paused or scrubbed recording shows a still of that moment.
-  - Timeline bar (`ui/TimelineBar.kt`): recorded spans, coloured alert marks, time labels, playhead; one finger scrubs, two fingers pinch (30 s to 7 days); zoom buttons 2m/15m/1h/6h/24h/48h.
-  - Controls: play/pause, -10 s, +10 s, previous/next alert (7 days), speed 1-16x, LIVE, go to date and time (quick choices, or a day plus start time). Screen stays on.
-  - Not in this stage: audio, alerts playing from their clip file, calendar with recorded days greyed, frame step, tap-to-pause and double tap, landscape/full screen (details in DECISIONS.md 2026-11-25).
+- Public repo feerlessleadr/sightline-android (secret scanning, push protection, private vulnerability reporting, Dependabot alerts, `main` ruleset). GPL-3.0, HTTPS-only, minSdk 30 (Android 11+). Last pushed commit: b298f0e (download an alert as MP4).
+- M1 (sign-in, camera list), M2 (live view) and most of M3 are done and owner-verified on a phone: recorded playback and timeline, calendar, alert clip files, audio, tap/double tap/full screen/landscape, swipe between cameras, frame step, motion boxes, group view, pinch zoom, flag/protect, download an alert as MP4.
+- **Built and owner-verified, NOT yet committed:** download a clip with a chosen start and end (cliplist finds the file), Settings > Downloads > Save downloads to (folder picker; needed a newer Fragment library, because biometric 1.1.0 pulls in 1.2.5), pull to refresh instead of the header refresh button, Download button text fix.
+- **Built, NOT yet seen on a phone:** the player restarts its decoder when a recording changes picture size part-way (new sequence parameter set on a key frame) and reports the new size.
+- Docs: `docs/feature-parity.md` (matrix), `docs/blue-iris-api.md` (API notes), `DECISIONS.md`.
 
 ## Feature target
-Parity with the web app Sightline for Blue Iris (https://github.com/rw377/Sightline-for-Blue-Iris). Matrix and milestones: `docs/feature-parity.md`. Behaviour is the spec; no code is copied.
+Parity with the web app Sightline for Blue Iris (https://github.com/rw377/Sightline-for-Blue-Iris). Behaviour is the spec; no code is copied.
 
 ## Next steps
-1. Owner tests M3 stage 1 (list below); fix what the real server shows (timeline reply shape and `/time/` parameters come from the web source and are unverified).
-2. M3 stage 2: PTZ pad (last), tap/double-tap and floating controls, full screen and landscape. Stage 3: group view. Stage 4: download as MP4, flag/protect.
-3. M4 alerts tab, M5 settings/server/log/activity/pop-ups/About, M6 CI/CodeQL/Dependabot/signing/tablets/accessibility.
+1. Commit and push the uncommitted work above when the owner says so.
+2. Rest of M3: older-Blue-Iris recording-list fallback (the owner's 6.1.6.1 has the timeline, so it cannot be tested here), PTZ pad last (the owner has no PTZ cameras).
+3. M4 alerts tab (list with flag/lock icons, Flagged filter, colour legend later), M4b deep links from Home Assistant notifications (then edit the HA automations in the ha project), M5 settings/server/log/activity/pop-ups/About, M6 CI/CodeQL/Dependabot/signing/tablets/accessibility.
 4. Lint leftovers (warnings only): `SharedPreferences.edit` KTX suggestion, version bumps.
 
 ## Owner must do
-Install the new debug APK, open a camera, and check:
-- Live still plays as before; the timeline appears under it with blue recorded stretches and coloured alert marks (or a note if the server refused the timeline: send me that note).
-- Tap or drag on the timeline: the picture changes to that moment; let go and it plays from there. Tap near the right end: back to live.
-- Play/pause, -10 s, +10 s, speed button (1/2/4/8/16x), LIVE button.
-- Previous/next alert buttons jump to an alert and play from 2 s before it.
-- Calendar (calendar button, bottom row): month grid, days with no recording greyed, dots on days with alerts, arrows change month, pick From and To times and tap Go; quick choices on top.
-- Sound: speaker button in the top bar (mute, volume slider up to 200%); on a camera with sound you should hear it live and in recordings at 1x; muting is instant; the setting is remembered.
-- Tap the picture: a live camera closes back to the grid, a recording pauses or resumes. Double tap: fit the whole picture or fill the screen (zoomed: back to normal). Full screen button (top bar): bars hide, controls float over the picture and fade after 3 s; tap to bring them back; Back leaves full screen. Rotate the phone to landscape: controls float; the player should keep its place.
-- Swipe sideways on the picture (not zoomed, not filled): it follows your finger and the next camera slides in beside it (a still frame, then its video); a long or quick swipe switches camera, a short one springs back; live stays live, a recording keeps its time.
-- Frame step: two small buttons beside play/pause step one frame (pauses first; from live only back); the still of that moment appears after a moment.
-- Motion boxes: new button in the player top bar (left of the speaker); boxes around movement in live, recordings and when stepping frames; they follow zoom.
-- Group view: new group button in the top bar (four squares). From a camera it opens the group (all cameras at once, names printed on the picture, live or recording at the same moment); tap a camera to go to it; the button goes back; swipe moves between groups; the timeline works for the whole group. Cameras hidden or disabled in Blue Iris are left out (redrawn as a grid); to test, hide one camera of a group in Blue Iris. Tapping in a recording may do nothing if Blue Iris reorders the cameras.
-- Flag or protect: jump to an alert with the previous/next alert buttons; a small flag chip appears at the top right of the picture; tap it for the two switches (Flagged, Protected). It changes the real alert in Blue Iris, so try it on one you do not mind (and switch it back). Needs a Blue Iris user allowed to change alerts.
-- Download: open an alert (previous/next alert), tap the flag chip, "Download this alert (MP4)...": pick re-encode or original, then Download MP4. Progress shows at the top of the picture with Cancel; the file lands in the phone's Downloads folder (Files app > Downloads). Needs a Blue Iris user allowed to export.
-- Layout: the picture is centred in the free space with the controls at the bottom (timeline, then 2m..48h with the calendar button, speed, LIVE, then play/pause row). Pinch the picture: it must stay visible, grow into the space above and below, pan with one finger, double tap or the badge resets; in Auto quality it gets sharper after a moment. Pinch the timeline; calendar button = go to date and time.
-- If a recording will not play, the message over the picture has a Retry button and the details; send me what it says.
+- Picture-size change: nothing to do unless a recording from a camera that switches between its sub and main stream shows a corner of the picture or freezes at the switch; tell me the camera and time.
+- Range download across a recording-file boundary is untested (set aside by the owner).
+- Everything else listed in earlier versions of this file was checked by the owner.
 
 ## Open questions
 - Latency and quality targets for live video on mobile data vs Wi-Fi.

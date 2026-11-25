@@ -11,6 +11,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Switch
@@ -19,9 +20,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
-import com.feerlessleadr.sightline.data.AlertItem
 import com.feerlessleadr.sightline.data.ExportOptions
-import com.feerlessleadr.sightline.data.Exports
 import java.text.SimpleDateFormat
 import java.util.Date
 
@@ -32,27 +31,30 @@ import java.util.Date
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun DownloadSheet(
+    title: String,
     cameraName: String,
-    alert: AlertItem,
+    startMs: Long,
+    endMs: Long,
     options: ExportOptions,
     onOptions: (ExportOptions) -> Unit,
     onDownload: () -> Unit,
     onDismiss: () -> Unit,
+    sizeText: String = "",
+    onChooseRange: (() -> Unit)? = null,
 ) {
-    val whole = Exports.wholeRange(alert)
     val locale = androidx.compose.ui.platform.LocalConfiguration.current.locales[0]
     val clock = SimpleDateFormat("h:mm:ss a", locale)
     ModalBottomSheet(onDismissRequest = onDismiss, containerColor = Sl.Surface) {
         Column(Modifier.fillMaxWidth().verticalScroll(rememberScrollState()).padding(horizontal = 20.dp).padding(bottom = 20.dp)) {
-            Text("Download this alert", style = MaterialTheme.typography.titleMedium)
+            Text(title, style = MaterialTheme.typography.titleMedium)
             Text(
-                cameraName + " · " + clock.format(Date(alert.timeMs)),
+                cameraName + " · " + SimpleDateFormat("EEE MMM d", locale).format(Date(startMs)),
                 style = MaterialTheme.typography.bodySmall,
                 color = Sl.Muted,
                 modifier = Modifier.padding(top = 2.dp),
             )
             Text(
-                "${clock.format(Date(whole.first))} to ${clock.format(Date(whole.last))}, about ${duration(whole.last - whole.first)}",
+                "${clock.format(Date(startMs))} to ${clock.format(Date(endMs))}, about ${duration(endMs - startMs)}" + (if (sizeText.isNotEmpty()) " · $sizeText" else ""),
                 style = MaterialTheme.typography.bodySmall,
                 color = Sl.Muted,
                 modifier = Modifier.padding(bottom = 8.dp),
@@ -84,6 +86,9 @@ fun DownloadSheet(
             SwitchRow("Include audio", "The camera's sound, if it records any", options.audio) { onOptions(options.copy(audio = it)) }
 
             Button(onClick = onDownload, modifier = Modifier.fillMaxWidth().padding(top = 12.dp)) { Text("Download MP4") }
+            if (onChooseRange != null) {
+                OutlinedButton(onClick = onChooseRange, modifier = Modifier.fillMaxWidth().padding(top = 4.dp)) { Text("Choose start and end…") }
+            }
         }
     }
 }

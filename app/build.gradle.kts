@@ -69,6 +69,8 @@ dependencies {
     implementation(libs.androidx.lifecycle.viewmodel.compose)
     implementation(libs.androidx.lifecycle.runtime.compose)
     implementation(libs.androidx.biometric)
+    // Biometric 1.1.0 pulls in an old Fragment (1.2.5) whose FragmentActivity rejects the activity result request codes.
+    implementation(libs.androidx.fragment)
     implementation(libs.okhttp)
     implementation(libs.kotlinx.serialization.json)
     implementation(libs.kotlinx.coroutines.android)

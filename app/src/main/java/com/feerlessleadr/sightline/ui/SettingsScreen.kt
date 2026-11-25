@@ -56,6 +56,8 @@ fun SettingsScreen(
     onMotionSensitivity: (Int) -> Unit,
     onQuality: (VideoQuality) -> Unit,
     onResetLayout: () -> Unit,
+    onDownloadFolder: (android.net.Uri?) -> Unit,
+    onOpeningPicker: () -> Unit,
     onLockAfter: (LockAfter) -> Unit,
     onForgetSaved: () -> Unit,
     onProbe: suspend (camera: String, size: StreamRequest, variant: ProbeVariant) -> String,
@@ -66,6 +68,10 @@ fun SettingsScreen(
     var probing by remember { mutableStateOf(false) }
     val scope = rememberCoroutineScope()
     val metrics = LocalResources.current.displayMetrics
+    val context = androidx.compose.ui.platform.LocalContext.current
+    val folderPicker =androidx.activity.compose.rememberLauncherForActivityResult(
+        androidx.activity.result.contract.ActivityResultContracts.OpenDocumentTree(),
+    ) { uri -> if (uri != null) onDownloadFolder(uri) }
     Scaffold(
         topBar = {
             TopAppBar(
@@ -89,6 +95,21 @@ fun SettingsScreen(
             ActionRow("Reset layout for this view", "Back to Blue Iris's order, normal tiles and fit-to-screen size for the group shown", onResetLayout)
             Section("Video")
             ChoiceRow("Video quality", "${session.quality.label} · ${session.quality.note}") { dialog = "quality" }
+            Section("Downloads")
+            ChoiceRow("Save downloads to", session.downloadFolderName ?: "The Downloads folder") {
+                onOpeningPicker()
+                try {
+                    folderPicker.launch(null)
+                } catch (e: Exception) {
+                    android.widget.Toast.makeText(context, "Couldn't open the folder picker: ${e.javaClass.simpleName}: ${e.message} at ${e.stackTrace.take(3).joinToString(" < ") { it.className.substringAfterLast('.') + "." + it.methodName }}", android.widget.Toast.LENGTH_LONG).show()
+                }
+            }
+            Text(
+                "Pick any folder, on the phone or an SD card. Android does not let apps use the top of the storage or the Downloads folder itself, so make a folder inside it (the picker has a New folder button).",
+                style = MaterialTheme.typography.bodySmall,
+                modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp),
+            )
+            if (session.downloadFolder != null) ActionRow("Use the Downloads folder again", "Stops using the folder above", { onDownloadFolder(null) })
             Section("Security")
             if (session.savedSignIn) {
                 ChoiceRow("Lock the app", session.lockAfter.label) { dialog = "lock" }
