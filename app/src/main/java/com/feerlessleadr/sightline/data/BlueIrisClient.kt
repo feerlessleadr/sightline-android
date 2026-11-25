@@ -197,17 +197,99 @@ class BlueIrisClient(
     }
 
     /**
+     * One frame of the recording of [camera] at [positionMs] as a JPEG (what the web app shows while a recording is
+     * paused or being scrubbed), or a [BlueIrisException] if Blue Iris has nothing at that time.
+     */
+    suspend fun recordedStill(camera: String, positionMs: Long, width: Int = 960): ByteArray {
+        if (session == null) throw SessionExpiredException()
+        val url = baseUrl.newBuilder()
+            .addPathSegment("time")
+            .addPathSegment(camera)
+            .addQueryParameter("jpeg", null)
+            .addQueryParameter("isolate", null)
+            .addQueryParameter("pos", positionMs.toString())
+            .addQueryParameter("w", width.coerceIn(80, 1920).toString())
+            .addQueryParameter("q", "70")
+            .build()
+        val request = Request.Builder().url(url).get().build()
+        return withContext(Dispatchers.IO) {
+            try {
+                http.newCall(request).execute().use { response ->
+                    if (response.isRedirect || response.code == 401 || response.code == 403) throw SessionExpiredException()
+                    if (!response.isSuccessful) throw BlueIrisException("Blue Iris answered HTTP ${response.code}.")
+                    val type = response.header("Content-Type").orEmpty()
+                    if (!type.startsWith("image/", ignoreCase = true)) throw BlueIrisException("Blue Iris has no picture for that time.")
+                    val source = response.body.source()
+                    source.request(MAX_IMAGE_BYTES + 1)
+                    if (source.buffer.size > MAX_IMAGE_BYTES) throw BlueIrisException("Blue Iris sent a picture that is too large.")
+                    source.readByteArray()
+                }
+            } catch (e: IOException) {
+                throw BlueIrisException("Can't reach Blue Iris.")
+            }
+        }
+    }
+
+    /**
+     * Where [camera] has recordings and alerts between [startMs] and [endMs] (milliseconds since 1970), at about
+     * [msecPerPixel] milliseconds per step. The reply gives spans as step numbers from the start.
+     */
+    suspend fun timeline(camera: String, startMs: Long, endMs: Long, msecPerPixel: Long): Timeline {
+        val startSec = startMs / 1000
+        val reply = call(
+            buildJsonObject {
+                put("cmd", "timeline")
+                put("startdate", startSec)
+                put("enddate", (endMs + 999) / 1000)
+                put("msecpp", msecPerPixel)
+                put("camera", camera)
+            },
+        )
+        return Timeline.parse(reply.data, startSec * 1000, msecPerPixel)
+    }
+
+    /** The alerts of one camera in a period (for jumping to the previous and next one), oldest first. */
+    suspend fun cameraAlerts(camera: String, startMs: Long, endMs: Long): List<AlertItem> {
+        val reply = call(
+            buildJsonObject {
+                put("cmd", "alertlist")
+                put("camera", camera)
+                put("startdate", startMs / 1000)
+                put("enddate", endMs / 1000)
+                put("view", "alerts")
+            },
+        )
+        val array = reply.data as? kotlinx.serialization.json.JsonArray ?: return emptyList()
+        return array.mapNotNull { AlertItem.parse(it) }.sortedBy { it.timeMs }
+    }
+
+    /**
      * Opens the live video stream of [camera]. The caller reads [VideoStream.source] and must close it.
      * Cookie only, HTTPS only, no redirects. The call has no overall time limit, but stalls of 20 s end it.
      */
-    suspend fun openVideo(camera: String, size: StreamRequest? = null): VideoStream {
+    suspend fun openVideo(camera: String, size: StreamRequest? = null): VideoStream =
+        openStream(listOf("video", camera, "2.0"), size, emptyList())
+
+    /**
+     * Opens recorded video of [camera] starting at [positionMs] (milliseconds since 1970), played by Blue Iris at
+     * [speedPercent] (100 = normal) from its timeline (`/time/`), the way the web app does. Same container as live video.
+     */
+    suspend fun openRecorded(camera: String, positionMs: Long, speedPercent: Int, size: StreamRequest? = null): VideoStream =
+        openStream(
+            listOf("time", camera), size,
+            listOf("opaque" to opaqueId, "pos" to positionMs.toString(), "speed" to speedPercent.coerceIn(10, 1600).toString()),
+        )
+
+    /** A random label the web app also sends with recorded streams; it only has to stay the same for this run. */
+    private val opaqueId = "sv" + java.util.UUID.randomUUID().toString().replace("-", "").take(8)
+
+    private suspend fun openStream(segments: List<String>, size: StreamRequest?, extra: List<Pair<String, String>>): VideoStream {
         if (session == null) throw SessionExpiredException()
         val url = baseUrl.newBuilder()
-            .addPathSegment("video")
-            .addPathSegment(camera)
-            .addPathSegment("2.0")
+            .apply { segments.forEach { addPathSegment(it) } }
             .addQueryParameter("audio", "0")
             .addQueryParameter("stream", "0")
+            .apply { extra.forEach { (k, v) -> addQueryParameter(k, v) } }
             .apply {
                 if (size != null) {
                     addQueryParameter("w", size.width.toString())
@@ -225,6 +307,7 @@ class BlueIrisClient(
         return withContext(Dispatchers.IO) {
             try {
                 val response = streaming.newCall(Request.Builder().url(url).get().build()).execute()
+                // Blue Iris answers with a picture or a short text instead of video when it has nothing for that time.
                 val problem: BlueIrisException? = when {
                     response.isRedirect || response.code == 401 || response.code == 403 -> SessionExpiredException()
                     !response.isSuccessful -> BlueIrisException("Blue Iris answered HTTP ${response.code}.")

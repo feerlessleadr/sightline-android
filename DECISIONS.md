@@ -217,3 +217,34 @@ Append-only, newest at the bottom. Never rewrite history; reverse a decision wit
 - **Cause**: the tile composables were created by position without a key, so when the order changed each position's state (the finger-hold gesture, own stream surface, still) stayed with the position and ended up on a different camera: the held gesture then moved the wrong tile. Also the GL video positions were updated by a `LaunchedEffect`, one frame after the overlays.
 - **Decision**: wrap each tile in `key(camera id)` so state follows the camera, and push the GL tile positions with `SideEffect` (same frame).
 - **Impact**: `ui/LiveGrid.kt` only.
+
+### 2026-11-25, M3 stage 1: recorded playback and timeline
+- **Context**: owner approved the M3 order (recorded playback and timeline, then PTZ and zoom, then group view, then download). Behaviour read from the web source (`recVideoUrl`, `loadTimeline`, `drawScrub`, `jumpAlert`, `goWindow`), not guessed.
+- **Decisions**:
+  - One player screen (`ui/PlayerScreen.kt`, replaces `LiveVideoScreen`) for live and recorded video. Recorded video: `GET /time/<camera>?opaque=&pos=<ms>&speed=<percent>&audio=0&stream=0&w=&h=&q=&kbps=&extend=2`, same container as live. A paused or scrubbed recording shows a still from `/time/<camera>?jpeg&isolate&pos=<ms>`.
+  - Each video frame carries its recording time (bytes 6..13 of the 18-byte block header, little-endian, 32-bit low part and 21-bit high part). VERIFIED on the real live capture (the first frame decoded to a time 16 s before the file was written). The player shows the position from the frame times.
+  - Pacing: recorded frames are handed to the decoder on the schedule of their recording times divided by the speed (never faster than Blue Iris sends); if far behind or far ahead it carries on from where it is. Reason: the web app paces on the client (durations from the timestamps) and a late or early burst must not drop frames.
+  - Timeline: `timeline` command (`startdate`, `enddate` in seconds, `msecpp`, `camera`); spans come back as `x1`/`x2` step numbers (clips, alerts with `type` flag bits) counted from the start second. Window math is the web's (`video/TimelineMath.kt`): ~500 steps across, 4% past now, 2m/15m/1h/6h/24h/48h buttons, pinch 30 s to 7 days, newest 15 s not playable (KEEP_OUT).
+  - Controls: play/pause, -10 s, +10 s, previous/next alert (7 days of `alertlist` for the camera, 2 s before the alert), speed 1/2/4/8/16x, LIVE, go to date and time (quick choices as the web; a custom day and start time shows one hour). Screen stays on while the player is open.
+- **Not in this stage (deliberately)**: audio and volume, alerts playing from their clip file (`/file/clips/`, cookie-only not yet verified), calendar with recorded days greyed and alert dots, frame step, old-Blue-Iris clip-list fallback, tap-to-pause, double tap, floating controls, landscape/full screen, PTZ, zoom, group view, download, flag/protect.
+- **Unverified until the owner tests**: the `timeline` reply shape (read from the web source), `/time/` streaming with these parameters, `jpeg&isolate` stills, and that Blue Iris paces `speed` itself (our pacing makes this safe either way).
+- **Impact**: new `ui/PlayerScreen.kt`, `ui/TimelineBar.kt`, `video/TimelineMath.kt`; `data/BlueIrisClient.kt` (`openRecorded`, `recordedStill`, `timeline`, `cameraAlerts`), `data/Models.kt` (Timeline, AlertItem), `video/BlueStreamReader.kt` (frame time), `video/LivePlayer.kt` (pacing, `StreamEndedException`).
+
+### 2026-11-25, Pinch zoom on the player's video
+- **Context**: owner asked for pinch to zoom on the video itself (web: digital zoom to 8x).
+- **Decision**: two fingers zoom around the point between them (1x to 8x), one finger pans while zoomed in (when not zoomed, one finger is left to the page so it still scrolls), double tap or the "2.5x reset" badge resets. The picture and the paused still share one zoom transform. In Auto quality, once the zoom has settled for 0.9 s the stream is asked for a bigger size (boost 1.6 from 1.4x, 2.5 from 2.2x, as the web app) and paused stills fetch 1920 px; the stream restarts only if the asked-for size really changes. Zoom resets when another camera opens.
+- **Change of view type**: the player now draws video in a TextureView (it was a SurfaceView) because a SurfaceView cannot be scaled and clipped reliably. Same decoder code.
+- **Impact**: `ui/PlayerScreen.kt` only. Not yet tried on a phone.
+
+### 2026-11-25, Player layout like the web app; zoom no longer blacks out the video
+- **Context**: owner tested zoom: the video went black as soon as it was pinched (even with a fixed quality, so not a stream restart), and the picture sat in a small 16:9 box at the top with empty space below, so a zoomed picture had nowhere to grow. The web app centres the picture on the screen, puts the controls at the very bottom and lets the zoomed picture fill the whole area.
+- **Cause of the black video**: the zoom was applied by Compose's `graphicsLayer` around a TextureView, which does not redraw a video view reliably.
+- **Decision**: the video area (the "stage") now takes all the room between the header and the controls. The TextureView fills the stage and its own `setTransform` matrix fits the picture (centred, aspect kept) and applies zoom and pan, so the layout system never scales the video. The paused still uses the same transform. Pan is clamped so the picture never leaves a gap, but a zoomed picture smaller than the stage stays centred and grows into the free space (`video/ZoomMath.kt`, tested).
+- **Controls** moved to the bottom, as in the web app: timeline, then one row (2m..48h with a calendar button for "go to date and time", speed, LIVE), then the transport buttons. The time ("Live" or the date and time) and the zoom badge are small chips on the picture; messages, errors and Retry also sit over the picture so they do not move the controls. The grey diagnostics line is shown only with an error.
+- **Impact**: `ui/PlayerScreen.kt`, `ui/Chrome.kt` (calendar glyph), new `video/ZoomMath.kt`.
+
+### 2026-11-25, Zoom black after letting go: a "not a number" pan
+- **Context**: the owner saw the zoomed video play (choppy) while the fingers were down and go black the moment they lifted; it came back only after zooming out.
+- **Cause**: the last event of a gesture has no finger down, so the centre point between the fingers is undefined (NaN). The pan was computed from it, became NaN, and a transform with NaN draws nothing. Zooming out reset the pan to 0, which is why that fixed it.
+- **Decision**: ignore events with no finger down or no centre, and make `ZoomMath.clampAxis` return 0 for any NaN or infinite offset (tested).
+- **Not addressed yet**: choppy playback while pinching (suspected: the whole stage recomposes on every finger movement). To check after this fix.

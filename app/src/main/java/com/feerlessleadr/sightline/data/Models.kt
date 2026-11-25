@@ -82,3 +82,56 @@ data class CameraList(val groups: List<Camera>, val cameras: List<Camera>) {
         }
     }
 }
+
+/** A stretch of time, [startMs] milliseconds since 1970 and [lengthMs] long. */
+data class TimeSpan(val startMs: Long, val lengthMs: Long)
+
+/** An alert mark on the timeline; [flags] are Blue Iris's alert flag bits (person, vehicle, wildlife, ...). */
+data class AlertMark(val startMs: Long, val lengthMs: Long, val flags: Long)
+
+/** Where a camera has recordings and alerts in a period (the `timeline` command). */
+data class Timeline(val clips: List<TimeSpan>, val alerts: List<AlertMark>) {
+    companion object {
+        val Empty = Timeline(emptyList(), emptyList())
+
+        /** The reply gives each span as `x1`/`x2` step numbers counted from [originMs] at [msecPerStep] each. */
+        internal fun parse(data: JsonElement?, originMs: Long, msecPerStep: Long): Timeline {
+            val obj = data as? kotlinx.serialization.json.JsonObject ?: return Empty
+            fun number(o: kotlinx.serialization.json.JsonObject, key: String) =
+                (o[key] as? kotlinx.serialization.json.JsonPrimitive)?.content?.toDoubleOrNull()
+            fun spans(key: String) = (obj[key] as? JsonArray).orEmpty().mapNotNull { e ->
+                val o = e as? kotlinx.serialization.json.JsonObject ?: return@mapNotNull null
+                val x1 = number(o, "x1") ?: return@mapNotNull null
+                val x2 = number(o, "x2") ?: return@mapNotNull null
+                Triple(originMs + (x1 * msecPerStep).toLong(), maxOf(1.0, x2 - x1) * msecPerStep, number(o, "type")?.toLong() ?: 0L)
+            }
+            return Timeline(
+                clips = spans("clips").map { TimeSpan(it.first, it.second.toLong()) },
+                alerts = spans("alerts").map { AlertMark(it.first, it.second.toLong(), it.third) },
+            )
+        }
+    }
+}
+
+/** One alert of a camera: when it happened, its AI text and where its recording is. */
+data class AlertItem(
+    val camera: String,
+    val memo: String,
+    val timeMs: Long,
+    val flags: Long,
+    val path: String,
+    val clip: String,
+    val offsetMs: Long,
+) {
+    companion object {
+        internal fun parse(element: JsonElement): AlertItem? {
+            val o = element as? kotlinx.serialization.json.JsonObject ?: return null
+            fun text(key: String) = (o[key] as? kotlinx.serialization.json.JsonPrimitive)?.content.orEmpty()
+            fun num(key: String) = text(key).toDoubleOrNull()?.toLong() ?: 0L
+            val camera = text("camera").ifEmpty { return null }
+            val date = num("date")
+            if (date <= 0L) return null
+            return AlertItem(camera, text("memo"), date * 1000, num("flags"), text("path"), text("clip"), num("offset"))
+        }
+    }
+}

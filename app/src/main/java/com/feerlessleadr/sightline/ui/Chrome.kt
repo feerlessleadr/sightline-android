@@ -24,6 +24,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
@@ -52,7 +53,7 @@ fun SlLogo(size: Dp = 28.dp) {
     }
 }
 
-enum class Glyph { Refresh, FullScreen, ExitFullScreen, Menu, Live, Alerts }
+enum class Glyph { Refresh, FullScreen, ExitFullScreen, Menu, Live, Alerts, Play, Pause, PrevAlert, NextAlert, Calendar }
 
 /** Small line icons drawn by hand, so the app needs no icon library. */
 @Composable
@@ -76,6 +77,28 @@ fun GlyphIcon(glyph: Glyph, color: Color, size: Dp = 22.dp) {
             Glyph.Live -> {
                 drawCircle(color, radius = s * 0.38f, style = st)
                 drawCircle(color, radius = s * 0.14f)
+            }
+            Glyph.Calendar -> {
+                drawRoundRect(color, Offset(s * 0.16f, s * 0.22f), Size(s * 0.68f, s * 0.62f), CornerRadius(s * 0.08f), style = st)
+                drawLine(color, Offset(s * 0.16f, s * 0.42f), Offset(s * 0.84f, s * 0.42f), strokeWidth = w)
+                drawLine(color, Offset(s * 0.34f, s * 0.12f), Offset(s * 0.34f, s * 0.30f), strokeWidth = w, cap = StrokeCap.Round)
+                drawLine(color, Offset(s * 0.66f, s * 0.12f), Offset(s * 0.66f, s * 0.30f), strokeWidth = w, cap = StrokeCap.Round)
+            }
+            Glyph.Play -> drawPath(
+                Path().apply { moveTo(s * 0.30f, s * 0.18f); lineTo(s * 0.82f, s * 0.5f); lineTo(s * 0.30f, s * 0.82f); close() },
+                color,
+            )
+            Glyph.Pause -> {
+                drawRect(color, Offset(s * 0.26f, s * 0.18f), Size(s * 0.18f, s * 0.64f))
+                drawRect(color, Offset(s * 0.56f, s * 0.18f), Size(s * 0.18f, s * 0.64f))
+            }
+            Glyph.PrevAlert -> {
+                drawRect(color, Offset(s * 0.18f, s * 0.2f), Size(s * 0.09f, s * 0.6f))
+                drawPath(Path().apply { moveTo(s * 0.82f, s * 0.2f); lineTo(s * 0.34f, s * 0.5f); lineTo(s * 0.82f, s * 0.8f); close() }, color)
+            }
+            Glyph.NextAlert -> {
+                drawRect(color, Offset(s * 0.73f, s * 0.2f), Size(s * 0.09f, s * 0.6f))
+                drawPath(Path().apply { moveTo(s * 0.18f, s * 0.2f); lineTo(s * 0.66f, s * 0.5f); lineTo(s * 0.18f, s * 0.8f); close() }, color)
             }
             Glyph.Alerts -> {
                 val p = Path().apply {

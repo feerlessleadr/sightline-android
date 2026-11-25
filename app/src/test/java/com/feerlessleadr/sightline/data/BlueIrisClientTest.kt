@@ -282,4 +282,32 @@ class BlueIrisClientTest {
         } catch (_: SessionExpiredException) {
         }
     }
+
+    @Test fun `recorded video asks for a time and speed with the cookie only`() = runBlocking {
+        signedInClient()
+        server.enqueue(MockResponse().addHeader("Content-Type", "video/mpeg").setBody("blue"))
+        client.openRecorded("Cam 1", 1_800_000_000_123L, 400).use { }
+        val request = server.takeRequest()
+        assertTrue(request.path!!.startsWith("/time/Cam%201?audio=0&stream=0&opaque=sv"))
+        assertTrue(request.path!!.contains("&pos=1800000000123&speed=400&extend=2"))
+        assertEquals("session=sess1", request.getHeader("Cookie"))
+    }
+
+    @Test fun `timeline and camera alerts are requested and read`() = runBlocking {
+        signedInClient()
+        reply("""{"result":"success","data":{"clips":[{"x1":0,"x2":4}],"alerts":[{"x1":1,"x2":2,"type":134217728}]}}""")
+        val t = client.timeline("Cam1", 1_800_000_000_500L, 1_800_000_060_000L, 256)
+        val body = Json.parseToJsonElement(server.takeRequest().body.readUtf8()).jsonObject
+        assertEquals("timeline", body["cmd"]!!.jsonPrimitive.content)
+        assertEquals("1800000000", body["startdate"]!!.jsonPrimitive.content)
+        assertEquals("256", body["msecpp"]!!.jsonPrimitive.content)
+        assertEquals(1_800_000_000_000L, t.clips[0].startMs)
+        assertEquals(1024L, t.clips[0].lengthMs)
+        assertEquals(1L shl 27, t.alerts[0].flags)
+
+        reply("""{"result":"success","data":[{"camera":"Cam1","date":1800000100,"memo":"person:90%","flags":67108864,"path":"@1.bvr","clip":"@2.bvr","offset":500},{"camera":"Cam1","date":1800000000,"memo":"","flags":0,"path":"@0.bvr","clip":"","offset":0}]}""")
+        val alerts = client.cameraAlerts("Cam1", 0L, 2_000_000_000_000L)
+        assertEquals(listOf(1_800_000_000_000L, 1_800_000_100_000L), alerts.map { it.timeMs })
+        assertEquals("person:90%", alerts[1].memo)
+    }
 }

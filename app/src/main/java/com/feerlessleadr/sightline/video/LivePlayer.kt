@@ -8,10 +8,14 @@ import com.feerlessleadr.sightline.data.BlueIrisException
 import com.feerlessleadr.sightline.data.VideoStream
 import java.io.IOException
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.job
 import kotlinx.coroutines.withContext
+
+/** The server ended the stream or the connection closed (for a recording: the end of what could be played). */
+class StreamEndedException(message: String = "The video stream ended.") : BlueIrisException(message)
 
 /** Counters for the on-screen video diagnostics: frames received, key frames seen, frames drawn. */
 data class PlayStats(
@@ -41,6 +45,13 @@ suspend fun playLive(
     surface: Surface,
     onSize: (width: Int, height: Int) -> Unit = { _, _ -> },
     onStats: (PlayStats) -> Unit = {},
+    /** Told the recording time (milliseconds since 1970) of each frame as it goes to the decoder. */
+    onFrameTime: (utcMillis: Long) -> Unit = {},
+    /**
+     * For recorded video: the playback speed (1 = real time). Frames are then handed to the decoder on the schedule
+     * their recording times give, divided by this speed, instead of as soon as they arrive. Null = as they arrive (live).
+     */
+    speed: Float? = null,
 ) {
     withContext(Dispatchers.IO) {
         // Cancelling the coroutine closes the connection, which unblocks the read below.
@@ -72,6 +83,8 @@ suspend fun playLive(
             var shown = 0
             var queued = 0L
             var gotKey = false
+            var firstUtc = -1L
+            var baseNs = System.nanoTime()
             var lastReport = SystemClock.elapsedRealtime()
             while (true) {
                 ensureActive()
@@ -85,6 +98,21 @@ suspend fun playLive(
                             // Wait for the first key frame; earlier frames cannot be decoded.
                         } else {
                             gotKey = true
+                            if (speed != null && block.utcMillis > 0) {
+                                // Play at the recorded pace: hold this frame until its time, so the decoder never piles up.
+                                if (firstUtc < 0) firstUtc = block.utcMillis
+                                val rel = block.utcMillis - firstUtc
+                                var due = baseNs + (rel * 1_000_000L / speed).toLong()
+                                val nowNs = System.nanoTime()
+                                if (due > nowNs + 2_000_000_000L || due < nowNs - 500_000_000L) {
+                                    // Far ahead or well behind (a jump in time, or a slow network): carry on from here.
+                                    baseNs = nowNs - (rel * 1_000_000L / speed).toLong()
+                                    due = nowNs
+                                }
+                                val waitMs = (due - nowNs) / 1_000_000L - 15
+                                if (waitMs > 0) delay(waitMs)
+                            }
+                            if (block.utcMillis > 0) onFrameTime(block.utcMillis)
                             val index = decoder.dequeueInputBuffer(INPUT_WAIT_US)
                             // If the decoder is behind, drop this frame rather than building up delay.
                             if (index >= 0) {
@@ -116,7 +144,7 @@ suspend fun playLive(
                             onStats(PlayStats(name, header.width, header.height, frames, keys, shown, headerMs, firstFrameMs, firstShownMs))
                         }
                     }
-                    StreamBlock.End -> throw BlueIrisException("The video stream ended.")
+                    StreamBlock.End -> throw StreamEndedException()
                     else -> Unit
                 }
             }
@@ -124,7 +152,7 @@ suspend fun playLive(
             if (isActive) throw BlueIrisException(e.message ?: "Unexpected video stream.")
         } catch (e: IOException) {
             // Closing the stream on cancel also lands here; only report it if we were not cancelled.
-            if (isActive) throw BlueIrisException("The video stream stopped.")
+            if (isActive) throw StreamEndedException("The video stream stopped.")
         } catch (e: MediaCodec.CodecException) {
             if (isActive) throw BlueIrisException("This phone could not decode the video (${e.diagnosticInfo.takeLast(60)}).")
         } catch (e: IllegalStateException) {

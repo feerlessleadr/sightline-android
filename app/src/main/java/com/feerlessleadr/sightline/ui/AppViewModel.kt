@@ -13,6 +13,8 @@ import com.feerlessleadr.sightline.data.LockAfter
 import com.feerlessleadr.sightline.data.LockPolicy
 import com.feerlessleadr.sightline.data.LoginFailedException
 import com.feerlessleadr.sightline.data.RecentAlert
+import com.feerlessleadr.sightline.data.AlertItem
+import com.feerlessleadr.sightline.data.Timeline
 import com.feerlessleadr.sightline.data.SavedSession
 import com.feerlessleadr.sightline.data.SessionStore
 import com.feerlessleadr.sightline.data.ProbeVariant
@@ -402,6 +404,27 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
             throw e
         }
     }
+
+    /** Runs [block] with the signed-in client; an ended session goes back to sign-in and is rethrown. */
+    private suspend fun <T> guarded(block: suspend (BlueIrisClient) -> T): T {
+        val current = client ?: throw SessionExpiredException()
+        try {
+            return block(current)
+        } catch (e: SessionExpiredException) {
+            if (client === current) endSession(e.message)
+            throw e
+        }
+    }
+
+    /** The player's calls to Blue Iris (live and recorded video, stills, timeline, alerts). */
+    val playerApi = PlayerApi(
+        openLive = { camera, size -> guarded { it.openVideo(camera, size) } },
+        openRecorded = { camera, pos, speed, size -> guarded { it.openRecorded(camera, pos, speed, size) } },
+        liveStill = { camera, width -> fetchStill(camera, width) },
+        recordedStill = { camera, pos, width -> guarded { it.recordedStill(camera, pos, width) } },
+        timeline = { camera, start, end, step -> guarded { it.timeline(camera, start, end, step) } },
+        alerts = { camera, start, end -> guarded { it.cameraAlerts(camera, start, end) } },
+    )
 
     /** Diagnostic for Settings -> Test video start: one line describing how [variant] of opening [camera] performed. */
     suspend fun probeVideo(camera: String, size: StreamRequest, variant: ProbeVariant): String {

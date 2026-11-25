@@ -22,7 +22,7 @@ import com.feerlessleadr.sightline.data.LockAfter
 import com.feerlessleadr.sightline.ui.SettingsScreen
 import com.feerlessleadr.sightline.ui.AppViewModel
 import com.feerlessleadr.sightline.ui.CameraListScreen
-import com.feerlessleadr.sightline.ui.LiveVideoScreen
+import com.feerlessleadr.sightline.ui.PlayerScreen
 import com.feerlessleadr.sightline.ui.LockScreen
 import com.feerlessleadr.sightline.ui.LoginScreen
 import com.feerlessleadr.sightline.ui.SightlineTheme
@@ -84,11 +84,10 @@ class MainActivity : FragmentActivity() {
                 BackHandler(enabled = live == null && showSettings) { showSettings = false }
 
                 when {
-                    session != null && live != null -> LiveVideoScreen(
+                    session != null && live != null -> PlayerScreen(
                         camera = live,
                         quality = session.quality,
-                        openVideo = viewModel::openVideo,
-                        loadStill = viewModel::fetchStill,
+                        api = viewModel.playerApi,
                         onQuality = viewModel::setQuality,
                         onBack = { liveCamera = null },
                     )

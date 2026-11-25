@@ -7,7 +7,8 @@ data class StreamHeader(val width: Int, val height: Int, val isHevc: Boolean)
 
 sealed interface StreamBlock {
     /** One encoded access unit (Annex-B H.264 or H.265). */
-    class Video(val data: ByteArray) : StreamBlock
+    /** [utcMillis] is when the frame was recorded (or captured, for live video), in milliseconds since 1970; 0 if unknown. */
+    class Video(val data: ByteArray, val utcMillis: Long = 0L) : StreamBlock
 
     data object Audio : StreamBlock
     data object Status : StreamBlock
@@ -43,7 +44,7 @@ class BlueStreamReader(private val source: BufferedSource) {
         val magic = source.readByteArray(4)
         if (!magic.contentEquals(BLOCK_MAGIC)) throw StreamFormatException("Lost sync in the video stream.")
         return when (val type = source.readByte().toInt()) {
-            0 -> StreamBlock.Video(readVideo())
+            0 -> readVideo()
             1 -> {
                 val size = source.readInt()
                 if (size < 0 || size > MAX_BLOCK) throw StreamFormatException("Bad audio block in the video stream.")
@@ -60,14 +61,16 @@ class BlueStreamReader(private val source: BufferedSource) {
         }
     }
 
-    private fun readVideo(): ByteArray {
+    private fun readVideo(): StreamBlock.Video {
         val head = source.readByteArray(18)
         val length = bigEndianInt(head, 14)
         if (length !in 1..MAX_BLOCK) {
             val hex = head.joinToString(" ") { "%02x".format(it) }
             throw StreamFormatException("Unrecognised video block header: $hex")
         }
-        return source.readByteArray(length.toLong())
+        // Bytes 6..13 hold the frame's clock time, little-endian: a 32-bit low part and a 21-bit high part (checked on a real capture).
+        val utc = (littleEndianInt(head, 6).toLong() and 0xFFFFFFFFL) + ((littleEndianInt(head, 10).toLong() and 0x1FFFFFL) shl 32)
+        return StreamBlock.Video(source.readByteArray(length.toLong()), utc)
     }
 
     private fun bigEndianInt(b: ByteArray, at: Int) =

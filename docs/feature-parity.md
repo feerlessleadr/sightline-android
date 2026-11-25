@@ -7,7 +7,7 @@ Status: **Done**, **Partial**, **Planned (Mn)**, **N/A** (with the reason). "And
 ## Milestones
 - **M1 (done):** sign-in, camera list.
 - **M2 (built, awaiting phone check):** live view: group live-video grid, groups, tile sizes, reorder, big tiles, snapshots mode, activity borders and AI labels, theme, network banner.
-- **M3:** player: live and recorded video, timeline, controls, PTZ, quality, zoom, motion boxes, group view, download, flag/protect.
+- **M3 (stage 1 built: recorded playback, timeline, controls, go to time):** player: live and recorded video, timeline, controls, PTZ, quality, zoom, motion boxes, group view, download, flag/protect.
 - **M4:** alerts tab: list, filters (manual and auto), ranges, preview, download.
 - **M5:** settings and server: Settings screen, server status, system log, activity overview, pop-ups on detection, About.
 - **M6:** release hardening: CI, CodeQL, Dependabot, signing, tablets and landscape, accessibility, diagnostics.
@@ -54,22 +54,22 @@ Status: **Done**, **Partial**, **Planned (Mn)**, **N/A** (with the reason). "And
 | Web feature | Status |
 |---|---|
 | Live video of one camera with audio, and volume slider / mute | Partial: video first version done (black screen being fixed); audio and volume M3 |
-| Recorded video from `/time/` and `/file/clips/`, speed up to 16x | Planned (M3) |
-| Scrubbable timeline with colour-coded alert marks, zoom 30 s to 7 d (pinch), buttons 2m 15m 1h 6h 24h 48h, midnight day labels, "now" stays at the right edge live | Planned (M3) |
-| Go to date and time: quick choices (Last hour, This morning, Last night, Yesterday, This time yesterday, This time last week) and a calendar with from/to times; days with no recordings greyed, days with alerts dotted | Planned (M3) |
-| Previous / next alert, +-10 s, play/pause, speed, one-tap LIVE | Planned (M3) |
+| Recorded video from `/time/` and `/file/clips/`, speed up to 16x | Partial: `/time/` and speeds 1-16x done (M3 stage 1); `/file/clips/` later |
+| Scrubbable timeline with colour-coded alert marks, zoom 30 s to 7 d (pinch), buttons 2m 15m 1h 6h 24h 48h, midnight day labels, "now" stays at the right edge live | Done (M3 stage 1; pinch zoom, buttons, day labels, now at the right edge) |
+| Go to date and time: quick choices (Last hour, This morning, Last night, Yesterday, This time yesterday, This time last week) and a calendar with from/to times; days with no recordings greyed, days with alerts dotted | Partial: quick choices, plus a day and start time (M3 stage 1); calendar with recorded days greyed and alert dots later |
+| Previous / next alert, +-10 s, play/pause, speed, one-tap LIVE | Done (M3 stage 1) |
 | Frame step back/forward | Planned (M3, on-screen buttons; the web uses `,` `.`) |
 | Swipe between cameras (and prev/next buttons) | Planned (M3) |
 | Watch all cameras at once (group view), live and in recordings, names on pictures, tap a camera to jump to it at that moment, press again to return; hidden/disabled cameras left out; layout rules for recordings | Planned (M3) |
 | Tap video: pause/resume a recording, close a live camera back to the grid; double tap fit/fill; floating controls that fade; full screen | Planned (M3) |
-| Digital zoom to 8x, pinch and pan, sharper stream while zoomed (Auto quality) | Planned (M3) |
+| Digital zoom to 8x, pinch and pan, sharper stream while zoomed (Auto quality) | Done (pinch, pan, double tap or badge to reset; sharper stream in Auto) |
 | Quality picker Auto, 480p to 4K with data rates and live rx rate; sizes and bitrates from the tier table | Partial: picker and tiers done (player button and Settings); live receive rate M3 |
 | PTZ pad (8 directions, zoom), Home (or preset named Home), preset list, stop on release/leave/30 s/slide-off, retry 30 s; only for PTZ cameras with permission | Planned (M3) |
 | Motion boxes in the player with sensitivity | Planned (M3) |
 | Rewind without Blue Iris's timeline (older 5.x): clip-list fallback, "Rewinding needs a newer Blue Iris" | Planned (M3) |
 | Alerts play from their recording file, carry on from the timeline outside it | Planned (M3) |
 | Restart at new size if a recording changes picture size | Planned (M3) |
-| Keeps the screen awake while the player is open (wake lock, found in the source only) | Planned (M3) |
+| Keeps the screen awake while the player is open (wake lock, found in the source only) | Done (M3 stage 1) |
 | Short haptic buzz on long-press actions (found in the source only) | Done (M2 round 2) |
 | Troubleshooting switches `?grpdebug=1` (outline each camera on the group picture) and `?cliprewind=0/1` (force clip-list rewinding) | Planned (M6): hidden developer options |
 | Flag / protect an alert (`update` command), flags shown, "Flagged" filter; clear message without permission | Planned (M3 player, M4 list) |

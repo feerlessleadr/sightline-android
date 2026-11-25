@@ -103,3 +103,10 @@ This is why MediaCodec is the leading decoder choice: parse these blocks, feed a
 - **Alert `flags` bits** (from the web source, not yet confirmed on this server): bit 1 flagged, bit 23 cancelled, bit 26 person, bit 27 vehicle, bit 31 wildlife. Bit 31 is beyond a 32-bit int; use 64-bit numbers.
 - **Keepalive**: `status` every 40 s while the app is open.
 - **ONVIF event names** saved as the alert label are shortened by Blue Iris; the web matches them by how they start (`PeopleDet` -> Person, `VehicleDet` -> Vehicle, `AnimalDet`, `FaceDet`, `Visitor`/`Doorbell`, `Intrusion`, `LineDet`/`TripWire`, `CellMotion`, `AlarmIn`).
+
+## Recorded video and the timeline (from the web app's source, 2026-11-25; first use on a real server pending)
+- **Frame clock VERIFIED**: bytes 6..13 of every 18-byte video block header are the frame's time in ms since 1970, little-endian (32-bit low part, then a 21-bit high part). On the live capture it matched the capture time.
+- **Recorded stream**: `GET /time/{camera}?session&opaque={random}&pos={ms}&speed={percent}&audio=0&stream=0&w&h&q&kbps&extend=2`. Same `blue` container. `pos` is in milliseconds since 1970. Blue Iris will not serve the newest ~15 s.
+- **Recorded still**: `GET /time/{camera}?jpeg&isolate&pos={ms}&w&q=70`.
+- **`timeline`**: `{cmd:"timeline", startdate, enddate (seconds), msecpp, camera}` -> `data.clips[] {x1,x2}` and `data.alerts[] {x1,x2,type}`; time = `startdate*1000 + x * msecpp`. `type` holds the alert flag bits. Older Blue Iris 5.x may refuse it.
+- **Per-camera alerts**: `alertlist` with `camera` = the id, `view:"alerts"`, last 7 days, for previous/next alert.
