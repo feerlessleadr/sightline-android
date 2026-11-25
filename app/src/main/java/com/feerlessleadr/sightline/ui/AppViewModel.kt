@@ -422,11 +422,11 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
 
     /** The player's calls to Blue Iris (live and recorded video, stills, timeline, alerts). */
     val playerApi = PlayerApi(
-        openLive = { camera, size, audio -> guarded { it.openVideo(camera, size, audio) } },
-        openRecorded = { camera, pos, speed, size, audio -> guarded { it.openRecorded(camera, pos, speed, size, audio) } },
+        openLive = { camera, size, audio, group -> guarded { it.openVideo(camera, size, audio, group) } },
+        openRecorded = { camera, pos, speed, size, audio, group -> guarded { it.openRecorded(camera, pos, speed, size, audio, group) } },
         liveStill = { camera, width -> fetchStill(camera, width) },
         openClip = { file, offset, speed, size, audio -> guarded { it.openClip(file, offset, speed, size, audio) } },
-        recordedStill = { camera, pos, width -> guarded { it.recordedStill(camera, pos, width) } },
+        recordedStill = { camera, pos, width, group -> guarded { it.recordedStill(camera, pos, width, group) } },
         timeline = { camera, start, end, step -> guarded { it.timeline(camera, start, end, step) } },
         alerts = { camera, start, end -> guarded { it.cameraAlerts(camera, start, end) } },
     )
@@ -731,8 +731,34 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
  */
 fun SessionState.playerCameras(current: String): List<Camera> {
     val list = cameras ?: return emptyList()
+    // Watching a group: swiping moves between the groups that have a layout (as the web app does).
+    if (list.groups.any { it.optionValue == current }) {
+        return list.groups.filter { it.isGroup && it.rects != null && (it.width ?: 0) > 0 }
+    }
     val group = list.groups.firstOrNull { it.optionValue == selectedGroup } ?: list.groups.firstOrNull { it.optionValue == "index" }
     val key = group?.optionValue ?: "index"
     val shown = (arrangements[key] ?: GroupArrangement()).sorted(list.visibleCameras(group)) { it.optionValue }
     return if (shown.any { it.optionValue == current }) shown else list.visibleCameras(null)
+}
+
+/**
+ * The group to open when the group button is pressed while watching the camera [current] (as the web app chooses): the
+ * grid's own group if it holds the camera, else All cameras, else the first group that does. Only groups Blue Iris
+ * gives a layout for are used.
+ */
+fun SessionState.groupFor(current: String): Camera? {
+    val list = cameras ?: return null
+    fun usable(g: Camera) = g.isGroup && g.rects != null && (g.width ?: 0) > 0 && (g.height ?: 0) > 0
+    fun holds(g: Camera) = g.group?.any { it.equals(current, ignoreCase = true) } == true
+    val grid = list.groups.firstOrNull { it.optionValue == selectedGroup }
+    if (grid != null && usable(grid) && holds(grid)) return grid
+    list.groups.firstOrNull { it.optionValue == "index" && usable(it) }?.let { return it }
+    return list.groups.firstOrNull { usable(it) && holds(it) }
+}
+
+/** The camera to go back to from the group [group]: the one the group view was opened from, else the first shown camera of the group. */
+fun SessionState.cameraToReturnTo(group: Camera, openedFrom: String?): Camera? {
+    val list = cameras ?: return null
+    val shown = list.visibleCameras(group)
+    return shown.firstOrNull { it.optionValue == openedFrom } ?: shown.firstOrNull()
 }

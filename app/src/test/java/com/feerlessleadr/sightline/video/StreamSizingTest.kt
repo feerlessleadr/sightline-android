@@ -71,4 +71,13 @@ class StreamSizingTest {
         assertFalse(isKeyFrame(trail, hevc = true))
         assertFalse(isKeyFrame(byteArrayOf(1, 2, 3), hevc = false))
     }
+
+    @Test
+    fun aTapPicksTheCameraWhoseBoxHoldsIt() {
+        val layout = GroupLayout(listOf("A", "B", "C"), listOf(listOf(0, 0, 100, 50), listOf(100, 0, 200, 50), listOf(0, 50, 200, 100)), 200, 100)
+        org.junit.Assert.assertEquals("A", layout.cameraAt(0.25f, 0.25f))
+        org.junit.Assert.assertEquals("B", layout.cameraAt(0.75f, 0.25f))
+        org.junit.Assert.assertEquals("C", layout.cameraAt(0.5f, 0.75f))
+        org.junit.Assert.assertNull(layout.cameraAt(1.2f, 0.5f))
+    }
 }

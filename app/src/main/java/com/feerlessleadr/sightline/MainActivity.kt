@@ -23,6 +23,8 @@ import com.feerlessleadr.sightline.ui.SettingsScreen
 import com.feerlessleadr.sightline.ui.AppViewModel
 import com.feerlessleadr.sightline.ui.CameraListScreen
 import com.feerlessleadr.sightline.ui.PlayerScreen
+import com.feerlessleadr.sightline.ui.cameraToReturnTo
+import com.feerlessleadr.sightline.ui.groupFor
 import com.feerlessleadr.sightline.ui.playerCameras
 import com.feerlessleadr.sightline.ui.LockScreen
 import com.feerlessleadr.sightline.ui.LoginScreen
@@ -80,7 +82,9 @@ class MainActivity : FragmentActivity() {
                         showSettings = false
                     }
                 }
-                val live = session?.cameras?.cameras?.firstOrNull { it.optionValue == liveCamera }
+                // The player shows a camera, or a whole group (which Blue Iris offers as one combined picture).
+                var groupFrom by rememberSaveable { mutableStateOf<String?>(null) }
+                val live = session?.cameras?.let { list -> list.cameras.firstOrNull { it.optionValue == liveCamera } ?: list.groups.firstOrNull { it.optionValue == liveCamera } }
                 BackHandler(enabled = live != null) { liveCamera = null }
                 BackHandler(enabled = live == null && showSettings) { showSettings = false }
 
@@ -90,7 +94,16 @@ class MainActivity : FragmentActivity() {
                         quality = session.quality,
                         api = viewModel.playerApi,
                         cameras = session.playerCameras(live.optionValue),
-                        onSwitchCamera = { liveCamera = it.optionValue },
+                        onSwitchCamera = { target ->
+                            // Remember where the group view was opened from, so its button can go back there.
+                            if (target.isGroup && !live.isGroup) groupFrom = live.optionValue
+                            if (!target.isGroup) groupFrom = null
+                            liveCamera = target.optionValue
+                        },
+                        groupTarget = if (live.isGroup) session.cameraToReturnTo(live, groupFrom) else session.groupFor(live.optionValue),
+                        findCamera = { name ->
+                            session.cameras?.cameras?.firstOrNull { it.optionValue.equals(name, ignoreCase = true) && it.isEnabled && !it.hidden }
+                        },
                         motionBoxes = session.motionBoxes,
                         sensitivity = session.motionSensitivity,
                         onMotionBoxes = viewModel::setMotionBoxes,

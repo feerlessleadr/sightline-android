@@ -60,7 +60,7 @@ Status: **Done**, **Partial**, **Planned (Mn)**, **N/A** (with the reason). "And
 | Previous / next alert, +-10 s, play/pause, speed, one-tap LIVE | Done (M3 stage 1) |
 | Frame step back/forward | Done (M3: two buttons beside play/pause) |
 | Swipe between cameras (and prev/next buttons) | Done: swipe sideways (M3); the web buttons are mouse-only, so none |
-| Watch all cameras at once (group view), live and in recordings, names on pictures, tap a camera to jump to it at that moment, press again to return; hidden/disabled cameras left out; layout rules for recordings | Planned (M3) |
+| Watch all cameras at once (group view), live and in recordings, names on pictures, tap a camera to jump to it at that moment, press again to return; hidden/disabled cameras left out; layout rules for recordings | Partial (M3 step 1): group button, live and recordings, names, tap to jump, back, swipe between groups; hiding hidden cameras is step 2 |
 | Tap video: pause/resume a recording, close a live camera back to the grid; double tap fit/fill; floating controls that fade; full screen | Done: tap pauses/resumes or closes live, double tap fit/fill, floating controls that fade, full screen (M3) |
 | Digital zoom to 8x, pinch and pan, sharper stream while zoomed (Auto quality) | Done (pinch, pan, double tap or badge to reset; sharper stream in Auto) |
 | Quality picker Auto, 480p to 4K with data rates and live rx rate; sizes and bitrates from the tier table | Partial: picker and tiers done (player button and Settings); live receive rate M3 |

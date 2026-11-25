@@ -168,13 +168,14 @@ class BlueIrisClient(
      * A current JPEG still of [camera] (a camera short name, or a group). Uses the session cookie only,
      * so the token is never in the URL. [width] is clamped to a sane range.
      */
-    suspend fun still(camera: String, width: Int = 480, quality: Int = 60): ByteArray {
+    suspend fun still(camera: String, width: Int = 480, quality: Int = 60, group: Boolean = false): ByteArray {
         if (session == null) throw SessionExpiredException()
         val url = baseUrl.newBuilder()
             .addPathSegment("image")
             .addPathSegment(camera)
             .addQueryParameter("w", width.coerceIn(80, 1920).toString())
             .addQueryParameter("q", quality.coerceIn(10, 100).toString())
+            .apply { if (group) { addQueryParameter("flags", "1"); addQueryParameter("mask", "1") } }
             .build()
         val request = Request.Builder().url(url).get().build()
         return withContext(Dispatchers.IO) {
@@ -211,7 +212,7 @@ class BlueIrisClient(
      * One frame of the recording of [camera] at [positionMs] as a JPEG (what the web app shows while a recording is
      * paused or being scrubbed), or a [BlueIrisException] if Blue Iris has nothing at that time.
      */
-    suspend fun recordedStill(camera: String, positionMs: Long, width: Int = 960): ByteArray {
+    suspend fun recordedStill(camera: String, positionMs: Long, width: Int = 960, group: Boolean = false): ByteArray {
         if (session == null) throw SessionExpiredException()
         val url = baseUrl.newBuilder()
             .addPathSegment("time")
@@ -221,6 +222,7 @@ class BlueIrisClient(
             .addQueryParameter("pos", positionMs.toString())
             .addQueryParameter("w", width.coerceIn(80, 1920).toString())
             .addQueryParameter("q", "70")
+            .apply { if (group) { addQueryParameter("flags", "1"); addQueryParameter("mask", "1") } }
             .build()
         val request = Request.Builder().url(url).get().build()
         return withContext(Dispatchers.IO) {
@@ -278,18 +280,26 @@ class BlueIrisClient(
      * Opens the live video stream of [camera]. The caller reads [VideoStream.source] and must close it.
      * Cookie only, HTTPS only, no redirects. The call has no overall time limit, but stalls of 20 s end it.
      */
-    suspend fun openVideo(camera: String, size: StreamRequest? = null, audio: Boolean = false): VideoStream =
-        openStream(listOf("video", camera, "2.0"), size, emptyList(), audio)
+    suspend fun openVideo(camera: String, size: StreamRequest? = null, audio: Boolean = false, group: Boolean = false): VideoStream =
+        openStream(listOf("video", camera, "2.0"), size, emptyList(), audio, group)
 
     /**
      * Opens recorded video of [camera] starting at [positionMs] (milliseconds since 1970), played by Blue Iris at
      * [speedPercent] (100 = normal) from its timeline (`/time/`), the way the web app does. Same container as live video.
      */
-    suspend fun openRecorded(camera: String, positionMs: Long, speedPercent: Int, size: StreamRequest? = null, audio: Boolean = false): VideoStream =
+    suspend fun openRecorded(
+        camera: String,
+        positionMs: Long,
+        speedPercent: Int,
+        size: StreamRequest? = null,
+        audio: Boolean = false,
+        group: Boolean = false,
+    ): VideoStream =
         openStream(
             listOf("time", camera), size,
             listOf("opaque" to opaqueId, "pos" to positionMs.toString(), "speed" to speedPercent.coerceIn(10, 1600).toString()),
             audio,
+            group,
         )
 
     /** A random label the web app also sends with recorded streams; it only has to stay the same for this run. */
@@ -300,6 +310,7 @@ class BlueIrisClient(
         size: StreamRequest?,
         extra: List<Pair<String, String>>,
         audio: Boolean = false,
+        group: Boolean = false,
     ): VideoStream {
         if (session == null) throw SessionExpiredException()
         val url = baseUrl.newBuilder()
@@ -307,6 +318,8 @@ class BlueIrisClient(
             .addQueryParameter("audio", if (audio) "1" else "0")
             .addQueryParameter("stream", "0")
             .apply { extra.forEach { (k, v) -> addQueryParameter(k, v) } }
+            // For a group, ask Blue Iris to print each camera's name on the combined picture (what the web app does).
+            .apply { if (group) { addQueryParameter("flags", "1"); addQueryParameter("mask", "1") } }
             .apply {
                 if (size != null) {
                     addQueryParameter("w", size.width.toString())

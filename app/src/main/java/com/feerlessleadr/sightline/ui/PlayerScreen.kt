@@ -47,6 +47,7 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -61,6 +62,7 @@ import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.Slider
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
 import kotlin.math.roundToInt
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.MaterialTheme
@@ -76,6 +78,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.rememberUpdatedState
+import com.feerlessleadr.sightline.video.GroupLayout
 import com.feerlessleadr.sightline.video.MotionDetector
 import com.feerlessleadr.sightline.video.MuLawPlayer
 import androidx.compose.runtime.LaunchedEffect
@@ -88,6 +91,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.asAndroidBitmap
@@ -98,6 +102,7 @@ import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.IntOffset
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
@@ -135,11 +140,11 @@ import kotlinx.coroutines.withContext
 
 /** What the player asks Blue Iris for. */
 class PlayerApi(
-    val openLive: suspend (camera: String, size: StreamRequest?, audio: Boolean) -> VideoStream,
-    val openRecorded: suspend (camera: String, positionMs: Long, speedPercent: Int, size: StreamRequest?, audio: Boolean) -> VideoStream,
+    val openLive: suspend (camera: String, size: StreamRequest?, audio: Boolean, group: Boolean) -> VideoStream,
+    val openRecorded: suspend (camera: String, positionMs: Long, speedPercent: Int, size: StreamRequest?, audio: Boolean, group: Boolean) -> VideoStream,
     val openClip: suspend (file: String, offsetMs: Long, speedPercent: Int, size: StreamRequest?, audio: Boolean) -> VideoStream,
     val liveStill: suspend (camera: String, width: Int) -> ByteArray?,
-    val recordedStill: suspend (camera: String, positionMs: Long, width: Int) -> ByteArray,
+    val recordedStill: suspend (camera: String, positionMs: Long, width: Int, group: Boolean) -> ByteArray,
     val timeline: suspend (camera: String, startMs: Long, endMs: Long, msecPerStep: Long) -> Timeline,
     val alerts: suspend (camera: String, startMs: Long, endMs: Long) -> List<AlertItem>,
 )
@@ -162,6 +167,9 @@ fun PlayerScreen(
     api: PlayerApi,
     cameras: List<Camera>,
     onSwitchCamera: (Camera) -> Unit,
+    /** The other side of the group button: the group to open from a camera, or the camera to return to from a group. */
+    groupTarget: Camera?,
+    findCamera: (String) -> Camera?,
     motionBoxes: Boolean,
     sensitivity: Int,
     onMotionBoxes: (Boolean) -> Unit,
@@ -220,6 +228,8 @@ fun PlayerScreen(
     var boost by remember(id) { mutableFloatStateOf(1f) }
     var fill by remember(id) { mutableStateOf(false) } // double tap: fit the whole picture, or fill the screen
     var fullScreen by remember { mutableStateOf(false) }
+    // Group view: where each camera sits in the combined picture (from the stream's headers), for tapping one.
+    var groupLayout by remember(id) { mutableStateOf<GroupLayout?>(null) }
     var stageW by remember { mutableFloatStateOf(0f) }
     var stageH by remember { mutableFloatStateOf(0f) }
     LaunchedEffect(id) {
@@ -302,6 +312,10 @@ fun PlayerScreen(
             return
         }
         if (window.length > 900_000L) window = TimeWindow(window.end - 120_000L, window.end)
+        if (camera.isGroup) {
+            enterRecording(target.timeMs - 2000, true) // a group: everyone jumps to that moment (no single recording file)
+            return
+        }
         val file = AlertClips.fileFor(target.clip, target.path)
         val alertClip = AlertClip(file, target.timeMs - target.offsetMs, target.timeMs + AlertClips.durationMillis(target.fileSize))
         clip = alertClip
@@ -320,7 +334,7 @@ fun PlayerScreen(
             if (shown > 0) pos = shown
             playing = false
         }
-        val target = TimelineMath.stepTarget(pos, direction, TimelineMath.frameIntervalMs(camera.fps), now()) ?: return
+        val target = TimelineMath.stepTarget(pos, direction, TimelineMath.frameIntervalMs(if (camera.isGroup) 30.0 else camera.fps), now()) ?: return
         seek(target)
     }
 
@@ -336,7 +350,11 @@ fun PlayerScreen(
     }
 
     // The picture: a live or recorded stream, whenever it is wanted and the video surface exists.
+    // Counts the streams started, so that a stream that has been replaced (another camera, a seek) can no longer change
+    // what is on screen while it is still shutting down: its late reports used to uncover the previous camera.
+    val streamGeneration = remember { IntArray(1) }
     LaunchedEffect(surface, live, playing, scrubbing, serial, streamSize, attempt, id, askAudio) {
+        val mine = ++streamGeneration[0]
         val target = surface
         if (target == null || scrubbing || !(live || playing)) {
             if (streaming) still = null // the surface keeps the last frame; do not cover it with an older still
@@ -358,24 +376,30 @@ fun PlayerScreen(
             // timeline shows an alert cropped to a corner); anywhere else, or if the file cannot be had, the timeline.
             val fileClip = if (isLive) null else clipFor(startAt)
             val stream = when {
-                isLive -> api.openLive(id, size, askAudio)
+                isLive -> api.openLive(id, size, askAudio && !camera.isGroup, camera.isGroup)
                 fileClip != null -> try {
                     api.openClip(fileClip.file, startAt - fileClip.start, atSpeed * 100, size, askAudio && atSpeed == 1).also { fromFile = true }
                 } catch (e: SessionExpiredException) {
                     throw e
                 } catch (e: BlueIrisException) {
                     clip = fileClip.copy(broken = true) // do not try this file again
-                    api.openRecorded(id, startAt, atSpeed * 100, size, askAudio && atSpeed == 1)
+                    api.openRecorded(id, startAt, atSpeed * 100, size, askAudio && atSpeed == 1 && !camera.isGroup, camera.isGroup)
                 }
-                else -> api.openRecorded(id, startAt, atSpeed * 100, size, askAudio && atSpeed == 1)
+                else -> api.openRecorded(id, startAt, atSpeed * 100, size, askAudio && atSpeed == 1 && !camera.isGroup, camera.isGroup)
             }
             val connected = SystemClock.elapsedRealtime() - started
             status = "Waiting for the first picture…"
             var firstPicture = -1L
             playLive(
                 stream, target,
-                onSize = { w, h -> aspect = w.toFloat() / h.toFloat() },
+                onSize = { w, h ->
+                    if (streamGeneration[0] == mine) {
+                        aspect = w.toFloat() / h.toFloat()
+                        if (camera.isGroup) groupLayout = groupLayoutFor(camera, stream, w, h, isLive)
+                    }
+                },
                 onStats = { s ->
+                    if (streamGeneration[0] != mine) return@playLive
                     if (s.shown > 0 && firstPicture < 0) firstPicture = SystemClock.elapsedRealtime() - started
                     stats = "${if (isLive) "live" else if (fromFile) "alert file x$atSpeed" else "recorded x$atSpeed"}: $s; asked for ${size.width}x${size.height} ${size.kbps} kbps; " +
                         "connection opened after $connected ms, first picture $firstPicture ms after the request started"
@@ -385,15 +409,16 @@ fun PlayerScreen(
                         still = null
                     }
                 },
-                onFrameTime = { frameUtc.set(it) },
+                onFrameTime = { if (streamGeneration[0] == mine) frameUtc.set(it) },
                 speed = if (isLive) null else atSpeed.toFloat(),
                 clipBaseMs = if (fromFile) startAt else null,
                 audio = sound,
-                onHasAudio = { streamHasAudio = it },
+                onHasAudio = { if (streamGeneration[0] == mine) streamHasAudio = it },
             )
         } catch (e: CancellationException) {
             throw e
         } catch (e: StreamEndedException) {
+            if (streamGeneration[0] != mine) return@LaunchedEffect
             val ended = clip
             if (isLive) {
                 error = e.message
@@ -415,6 +440,7 @@ fun PlayerScreen(
                 }
             }
         } catch (e: BlueIrisException) {
+            if (streamGeneration[0] != mine) return@LaunchedEffect
             error = e.message
         }
     }
@@ -457,7 +483,7 @@ fun PlayerScreen(
         } else {
             if (scrubbing || !playing) delay(150) // wait for the finger to settle
             try {
-                val bytes = api.recordedStill(id, pos, stillWidth)
+                val bytes = api.recordedStill(id, pos, stillWidth, camera.isGroup)
                 val decoded = withContext(Dispatchers.Default) { BitmapFactory.decodeByteArray(bytes, 0, bytes.size)?.asImageBitmap() }
                 if (decoded != null && !streaming) {
                     still = decoded
@@ -519,10 +545,21 @@ fun PlayerScreen(
     }
     // One tap on the picture: floating controls show or hide; otherwise a live camera closes back to where it was
     // opened and a recording pauses or resumes (like UI3 and the web app).
-    val onStageTap by rememberUpdatedState<() -> Unit> {
+    // A tap in group view: show the camera that was tapped, at the same moment (live stays live, a recording keeps its time).
+    fun jumpToCameraAt(at: Offset) {
+        val layout = groupLayout ?: return
+        val fit = ZoomMath.fit(stageW, stageH, aspect, fill)
+        if (zoom <= 0f || fit[2] <= 0f || fit[3] <= 0f) return
+        val fx = ((at.x - panX) / zoom - fit[0]) / fit[2]
+        val fy = ((at.y - panY) / zoom - fit[1]) / fit[3]
+        val name = layout.cameraAt(fx, fy) ?: return
+        findCamera(name)?.let { onSwitchCamera(it) }
+    }
+    val onStageTap by rememberUpdatedState<(Offset) -> Unit> { at ->
         lastTouch = SystemClock.elapsedRealtime()
         when {
             overlay -> controlsVisible = !controlsVisible
+            camera.isGroup -> jumpToCameraAt(at)
             live -> onBack()
             else -> togglePlay()
         }
@@ -554,7 +591,7 @@ fun PlayerScreen(
 
     suspend fun loadNeighbour(other: Camera) {
         val bytes = try {
-            if (live) api.liveStill(other.optionValue, 640) else api.recordedStill(other.optionValue, pos, 640)
+            if (live) api.liveStill(other.optionValue, 640) else api.recordedStill(other.optionValue, pos, 640, other.isGroup)
         } catch (e: CancellationException) {
             throw e
         } catch (e: BlueIrisException) {
@@ -647,6 +684,7 @@ fun PlayerScreen(
     }
 
     // Parts that appear in more than one layout.
+    val title = if (camera.isGroup) "${camera.displayName} · ${camera.group?.size ?: 0}" else camera.displayName
     val soundButton: @Composable () -> Unit = {
         Box {
             IconAction(if (soundOn && volume > 0f) Glyph.Sound else Glyph.Muted, "Volume") { showVolume = true }
@@ -673,6 +711,16 @@ fun PlayerScreen(
     val fullScreenButton: @Composable () -> Unit = {
         IconAction(if (fullScreen) Glyph.ExitFullScreen else Glyph.FullScreen, if (fullScreen) "Exit full screen" else "Full screen") {
             fullScreen = !fullScreen
+        }
+    }
+    val groupButton: @Composable () -> Unit = {
+        val target = groupTarget
+        if (target != null) {
+            IconAction(
+                Glyph.Group,
+                if (camera.isGroup) "Back to ${target.displayName}" else "Watch all cameras at the same moment",
+                tint = if (camera.isGroup) Sl.Accent else Sl.Text,
+            ) { onSwitchCamera(target) }
         }
     }
     val boxesButton: @Composable () -> Unit = {
@@ -771,10 +819,11 @@ fun PlayerScreen(
                                     onStageDoubleTap()
                                 } else {
                                     lastTapAt = endedAt
+                                    val tapAt = down.position
                                     pendingTap = launch {
                                         delay(300)
                                         pendingTap = null
-                                        onStageTap()
+                                        onStageTap(tapAt)
                                     }
                                 }
                             }
@@ -906,19 +955,35 @@ fun PlayerScreen(
             }
             // Small labels on the picture; they move down while the floating top bar is showing.
             val labelTop = if (overlay && controlsVisible) 52.dp else 0.dp
-            Text(
-                if (live) "Live" else formatWhen(pos),
-                color = if (live) Sl.Live else Color.White,
-                fontSize = 12.sp,
-                fontWeight = FontWeight.SemiBold,
-                modifier = Modifier
+            // The camera's name and the moment shown (the top bar has no room left for the name).
+            Row(
+                Modifier
                     .align(Alignment.TopStart)
                     .padding(top = labelTop)
                     .padding(8.dp)
+                    .widthIn(max = with(density) { (stageW * 0.62f).toDp() })
                     .clip(RoundedCornerShape(12.dp))
                     .background(Color(0x99000000))
                     .padding(horizontal = 10.dp, vertical = 5.dp),
-            )
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Text(
+                    title,
+                    color = Color.White,
+                    fontSize = 12.sp,
+                    fontWeight = FontWeight.SemiBold,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.weight(1f, fill = false),
+                )
+                Text(
+                    "  ·  " + (if (live) "Live" else formatWhen(pos)),
+                    color = if (live) Sl.Live else Color.White,
+                    fontSize = 12.sp,
+                    fontWeight = FontWeight.SemiBold,
+                    maxLines = 1,
+                )
+            }
             if (zoom > 1f) {
                 Text(
                     "${"%.1f".format(zoom)}×  reset",
@@ -1097,7 +1162,8 @@ fun PlayerScreen(
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
                     TextButton(onClick = onBack) { Text("Back") }
-                    Text(camera.displayName, style = MaterialTheme.typography.titleMedium, maxLines = 1, modifier = Modifier.weight(1f).padding(horizontal = 8.dp))
+                    Spacer(Modifier.weight(1f))
+                    groupButton()
                     boxesButton()
                     soundButton()
                     fullScreenButton()
@@ -1125,9 +1191,10 @@ fun PlayerScreen(
         Scaffold(
             topBar = {
                 TopAppBar(
-                    title = { Text(camera.displayName) },
+                    title = {},
                     navigationIcon = { TextButton(onClick = onBack) { Text("Back") } },
                     actions = {
+                        groupButton()
                         boxesButton()
                     soundButton()
                         fullScreenButton()
@@ -1199,3 +1266,21 @@ internal fun Pill(
     }
 }
 
+
+/**
+ * Where each camera sits in a group's combined picture. Live: the stream's own headers, else the camera list's layout.
+ * A recording: Blue Iris lays a group out again for playback (seen: a different camera order), so the stream's headers
+ * are only used when they name the cameras in the camera list's order; otherwise no layout (no guessing, no jumping).
+ */
+private fun groupLayoutFor(group: Camera, stream: VideoStream, width: Int, height: Int, live: Boolean): GroupLayout? {
+    val fromHeaders = GroupLayout.fromHeaders(stream.camListHeader, stream.recListHeader, width, height)
+    val names = group.group
+    val rects = group.rects
+    val w = group.width ?: 0
+    val h = group.height ?: 0
+    val fromList = if (names != null && rects != null && names.size == rects.size && w > 0 && h > 0) GroupLayout(names, rects, w, h) else null
+    if (live) return fromHeaders ?: fromList
+    val sameOrder = fromHeaders != null && fromList != null &&
+        fromHeaders.cams.map { it.lowercase() } == fromList.cams.map { it.lowercase() }
+    return if (sameOrder) fromHeaders else null
+}

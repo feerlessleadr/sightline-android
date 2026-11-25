@@ -103,6 +103,15 @@ data class GroupLayout(val cams: List<String>, val rects: List<List<Int>>, val w
         return floatArrayOf(r[0] / width.toFloat(), r[1] / height.toFloat(), r[2] / width.toFloat(), r[3] / height.toFloat())
     }
 
+    /** The camera whose box holds the point ([fx], [fy]) given as fractions 0..1 of the group picture, or null. */
+    fun cameraAt(fx: Float, fy: Float): String? {
+        if (width <= 0 || height <= 0) return null
+        val x = fx * width
+        val y = fy * height
+        val i = rects.indexOfFirst { x >= it[0] && x < it[2] && y >= it[1] && y < it[3] }
+        return if (i >= 0) cams.getOrNull(i) else null
+    }
+
     companion object {
         /**
          * Blue Iris describes the layout of each group stream in its `X-CamList` (a list of quoted names) and

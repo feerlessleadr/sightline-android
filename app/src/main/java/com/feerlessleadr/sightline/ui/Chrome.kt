@@ -53,7 +53,7 @@ fun SlLogo(size: Dp = 28.dp) {
     }
 }
 
-enum class Glyph { Refresh, FullScreen, ExitFullScreen, Menu, Live, Alerts, Play, Pause, PrevAlert, NextAlert, Calendar, Sound, Muted, FrameBack, FrameForward, Boxes }
+enum class Glyph { Refresh, FullScreen, ExitFullScreen, Menu, Live, Alerts, Play, Pause, PrevAlert, NextAlert, Calendar, Sound, Muted, FrameBack, FrameForward, Boxes, Group }
 
 /** Small line icons drawn by hand, so the app needs no icon library. */
 @Composable
@@ -91,6 +91,12 @@ fun GlyphIcon(glyph: Glyph, color: Color, size: Dp = 22.dp) {
                     drawLine(color, Offset(s * 0.64f, s * 0.38f), Offset(s * 0.88f, s * 0.62f), strokeWidth = w, cap = StrokeCap.Round)
                     drawLine(color, Offset(s * 0.88f, s * 0.38f), Offset(s * 0.64f, s * 0.62f), strokeWidth = w, cap = StrokeCap.Round)
                 }
+            }
+            Glyph.Group -> {
+                val a = s * 0.16f
+                val b = s * 0.54f
+                val c = s * 0.30f
+                for (x in listOf(a, b)) for (y in listOf(a, b)) drawRoundRect(color, Offset(x, y), Size(c, c), CornerRadius(s * 0.05f), style = st)
             }
             Glyph.Boxes -> {
                 drawRoundRect(color, Offset(s * 0.14f, s * 0.20f), Size(s * 0.72f, s * 0.60f), CornerRadius(s * 0.06f), style = st)
