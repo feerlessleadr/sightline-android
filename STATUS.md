@@ -11,7 +11,7 @@ Last updated: 2026-11-24
 Parity with the web app Sightline for Blue Iris (https://github.com/rw377/Sightline-for-Blue-Iris). Its README is the feature list. Behaviour is the spec; no code is copied.
 
 ## Next steps
-1. Write `docs/blue-iris-api.md` from the Blue Iris JSON API behaviour (login challenge/response, camlist, status, alertlist), not from copied code.
+1. DONE 2026-11-24: `docs/blue-iris-api.md` and `tools/Sample-BlueIris.ps1`. Owner ran the script; login, cookie-only stills, and `camlist`/`status`/`alertlist` shapes are VERIFIED (Blue Iris 6.1.6.1). Not committed yet. Still to verify: cookie-only video/clips, stream payload format, `flags` bits, `timeline`/`cliplist`/`ptz`/`export` shapes.
 2. Milestone 1: Gradle skeleton (Kotlin, Compose, minSdk 26), HTTPS-only network config, sign-in screen, `camlist` shows cameras.
 3. Milestone 2: video spike, MediaCodec vs Media3, one live camera on screen.
 4. When Gradle files exist: add `dependabot.yml` and a CodeQL workflow (CodeQL fails on a repo with no code).

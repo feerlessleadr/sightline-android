@@ -75,3 +75,23 @@ Append-only, newest at the bottom. Never rewrite history; reverse a decision wit
 - **Context:** Owner reviewed the entries above.
 - **Decision:** Approved: stack (Kotlin, Compose, OkHttp, MediaCodec with a Media3 spike), no code copied from the GPL web project, full feature parity, and creating the public GitHub repo. The cleartext decision was replaced by HTTPS only (entry above).
 - **Impact:** Stack is no longer "proposed". Video decoder choice (MediaCodec vs Media3) is still open until the spike.
+
+### 2026-11-24, Test credentials: owner runs the login, not Claude
+- **Context:** Owner created a dedicated non-admin Blue Iris test user and asked how to share the password. The Blue Iris server is the owner's live server, not a development build of this app.
+- **Options considered:** Paste the password in chat (rejected: it lands in transcripts); a password file Claude reads (rejected: Claude should not authenticate to the live server with a real password); an owner-run script that logs in and saves redacted samples (chosen).
+- **Decision:** The owner runs `tools/Sample-BlueIris.ps1`, which prompts for the password with a hidden input, never saves it, and writes sample JSON (session token redacted) to a folder outside the repo. Claude reads those samples to write models and tests. Passwords are never stored in the repo, WORKSPACE.md or chat. Later, the owner types the password into the app's own sign-in screen when testing.
+- **Rationale:** Keeps the secret with the owner and still gives real response shapes.
+- **Impact:** `tools/Sample-BlueIris.ps1`, `docs/blue-iris-api.md` (marks facts as unverified until sampled). Sample files stay out of git.
+
+### 2026-11-24, Finding: session token in URLs, and the video container (leans toward MediaCodec)
+- **Context:** Reading how the reference web app talks to Blue Iris (behaviour only) showed it passes `session=` in image and video URLs, and also sets a session cookie. It also showed that the live stream is a Blue Iris container ("blue" header, typed blocks) wrapping H.264 or H.265 payloads, not MP4 or MPEG-TS.
+- **Options considered:** Token in URL (as the web app does) vs cookie-only; MediaCodec with our own block parser vs a Media3 custom extractor.
+- **Decision:** Try cookie-only (OkHttp cookie jar) first to honor the no-tokens-in-URLs rule; if Blue Iris refuses, record an exception here. For video, MediaCodec is now the leading choice because a Media3 extractor would need the same block parser anyway. The Media3 spike is still allowed but should be short.
+- **Rationale:** Smaller code and lower latency with direct decode. The cookie approach keeps tokens out of logs and the proxy's access log.
+- **Impact:** `docs/blue-iris-api.md` lists both as items to verify with real data. Reverses nothing; refines the stack entry.
+
+### 2026-11-24, Verified against a live server: login, cookie-only session, response shapes
+- **Context:** Owner ran `tools/Sample-BlueIris.ps1` against their Blue Iris 6.1.6.1 server as a non-admin user.
+- **Decision:** (1) The MD5 challenge/response login works as documented in `docs/blue-iris-api.md`. (2) A session cookie alone is enough for `/image/`, so the app uses an OkHttp cookie jar and keeps tokens out of URLs; the earlier "exception" fallback is not needed for stills (video and clips still to check). (3) `camlist`, `status` and `alertlist` shapes are recorded in the API doc. (4) The `log` command is denied to a non-admin user ("Access denied"), so the system-log screen must handle that, as the web app also notes.
+- **Rationale:** Confirms the plan with real data before any app code is written.
+- **Impact:** `docs/blue-iris-api.md`. Real samples contain camera names and the server's coordinates, so they stay outside the repo and tests use invented fixtures. The coordinates field in the login reply must never be logged.
