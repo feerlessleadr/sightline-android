@@ -95,3 +95,16 @@ Append-only, newest at the bottom. Never rewrite history; reverse a decision wit
 - **Decision:** (1) The MD5 challenge/response login works as documented in `docs/blue-iris-api.md`. (2) A session cookie alone is enough for `/image/`, so the app uses an OkHttp cookie jar and keeps tokens out of URLs; the earlier "exception" fallback is not needed for stills (video and clips still to check). (3) `camlist`, `status` and `alertlist` shapes are recorded in the API doc. (4) The `log` command is denied to a non-admin user ("Access denied"), so the system-log screen must handle that, as the web app also notes.
 - **Rationale:** Confirms the plan with real data before any app code is written.
 - **Impact:** `docs/blue-iris-api.md`. Real samples contain camera names and the server's coordinates, so they stay outside the repo and tests use invented fixtures. The coordinates field in the login reply must never be logged.
+
+### 2026-11-24, Milestone 1 implementation choices
+- **Context:** First app code: sign-in and camera list.
+- **Decision:**
+  - Same toolchain and versions as Embidextrous (AGP 9.4.1, Kotlin 2.4.21, Gradle wrapper copied from it, compileSdk 37, targetSdk 36, minSdk 26, JVM 17). Package `com.feerlessleadr.sightline`.
+  - `ServerAddress.parse` is the only way to build the base URL. It refuses `http://` and any other scheme, URLs with user info, query or fragment. A bare host gets `https://`. A reverse-proxy sub-path is kept.
+  - The password is never stored or logged: it lives in one text field, is cleared on tap, and is used only to compute the MD5 response. The app remembers only the server address and user name (SharedPreferences, excluded from backup). Sessions are in memory only; "stay signed in" comes later with Keystore encryption.
+  - Session goes in the request body and a `session` cookie for the one server host. Never in a URL. Blue Iris's own Set-Cookie headers are ignored.
+  - No redirects followed, 15 s timeouts, 8 MB reply cap, friendly errors that never include server text beyond Blue Iris's own `reason`.
+  - The login reply's location fields are dropped at parse time (`LoginInfo` omits them).
+  - No cleartext, system certificate authorities only (network security config). If the proxy uses a private CA, that must be handled deliberately; it is not allowed silently.
+  - Unit tests use only invented data. Real samples stay outside the repo.
+- **Impact:** `app/`, Gradle files. Release signing, CI and Dependabot config still to add.
