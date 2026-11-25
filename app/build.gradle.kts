@@ -19,7 +19,7 @@ android {
 
     defaultConfig {
         applicationId = "com.feerlessleadr.sightline"
-        minSdk = 26
+        minSdk = 30
         targetSdk = 36
         versionCode = appVersionCode
         versionName = appVersion
@@ -68,6 +68,7 @@ dependencies {
     implementation(libs.androidx.activity.compose)
     implementation(libs.androidx.lifecycle.viewmodel.compose)
     implementation(libs.androidx.lifecycle.runtime.compose)
+    implementation(libs.androidx.biometric)
     implementation(libs.okhttp)
     implementation(libs.kotlinx.serialization.json)
     implementation(libs.kotlinx.coroutines.android)

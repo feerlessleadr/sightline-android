@@ -195,6 +195,48 @@ class BlueIrisClientTest {
         }
     }
 
+    @Test fun `still uses the cookie only and keeps the token out of the url`() = runBlocking {
+        signedInClient()
+        server.enqueue(MockResponse().addHeader("Content-Type", "image/jpeg").setBody("jpegbytes"))
+        val bytes = client.still("Cam 1", width = 99999, quality = 1)
+        assertEquals("jpegbytes", String(bytes))
+        val request = server.takeRequest()
+        assertEquals("GET", request.method)
+        assertEquals("/image/Cam%201?w=1920&q=10", request.path)
+        assertFalse(request.path!!.contains("sess1"))
+        assertEquals("session=sess1", request.getHeader("Cookie"))
+    }
+
+    @Test fun `still refuses non-images, redirects, oversize and signed-out use`() {
+        try {
+            runBlocking { client.still("Cam1") }
+            fail("expected SessionExpiredException")
+        } catch (_: SessionExpiredException) {
+            assertEquals(0, server.requestCount)
+        }
+        signedInClient()
+        server.enqueue(MockResponse().addHeader("Content-Type", "text/html").setBody("<html>"))
+        try {
+            runBlocking { client.still("Cam1") }
+            fail("expected BlueIrisException")
+        } catch (e: BlueIrisException) {
+            assertEquals("Blue Iris did not send a picture.", e.message)
+        }
+        server.enqueue(MockResponse().setResponseCode(302).addHeader("Location", "/login"))
+        try {
+            runBlocking { client.still("Cam1") }
+            fail("expected SessionExpiredException")
+        } catch (_: SessionExpiredException) {
+        }
+        server.enqueue(MockResponse().addHeader("Content-Type", "image/jpeg").setBody("x".repeat(7 * 1024 * 1024)))
+        try {
+            runBlocking { client.still("Cam1") }
+            fail("expected BlueIrisException")
+        } catch (e: BlueIrisException) {
+            assertTrue(e.message!!.contains("too large"))
+        }
+    }
+
     @Test fun `logout clears the session even when the server fails`() = runBlocking {
         signedInClient()
         server.enqueue(MockResponse().setResponseCode(500))

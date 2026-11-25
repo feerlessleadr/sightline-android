@@ -108,3 +108,34 @@ Append-only, newest at the bottom. Never rewrite history; reverse a decision wit
   - No cleartext, system certificate authorities only (network security config). If the proxy uses a private CA, that must be handled deliberately; it is not allowed silently.
   - Unit tests use only invented data. Real samples stay outside the repo.
 - **Impact:** `app/`, Gradle files. Release signing, CI and Dependabot config still to add.
+
+### 2026-11-24, Milestone 2 part 1: live-still grid
+- **Context**: Sign-in and camera list verified on a phone. Next is a camera grid; the web app's snapshot mode is the first step before live video.
+- **Options considered**: Coil or another image library; plain `BitmapFactory` decode of JPEG bytes fetched by our own client.
+- **Decision**: `BlueIrisClient.still()` fetches `/image/{camera}?w=&q=` using the session cookie only (no token in the URL), accepts only `image/*` replies up to 6 MB, treats redirects, 401 and 403 as an expired session. The grid (`LazyVerticalGrid`, adaptive 170 dp tiles) refreshes each tile every 2 s only while the tile is on screen and the app is started.
+- **Rationale**: Reuses the hardened HTTP client (HTTPS only, no redirects, size caps) and adds no dependency or second network stack.
+- **Impact**: `data/BlueIrisClient.kt`, `ui/CameraListScreen.kt`, `ui/AppViewModel.kt`. `tools/Sample-BlueIris.ps1` now also probes cookie-only `/thumbs/` and `/video/` and prints the first stream bytes, to decide MediaCodec vs Media3 in the next step.
+
+### 2026-11-24, Stay signed in by saving the session token (not the password)
+- **Context**: Owner reported having to sign in again every time the app is closed. Earlier decision: the password is never stored.
+- **Options considered**: (a) keep signing in each launch; (b) save the Blue Iris session token, encrypted; (c) save the password, encrypted, and sign in silently each launch, optionally behind a biometric prompt.
+- **Decision**: (b). `SessionStore` encrypts the token (plus server address and non-secret login details) with an AES-256-GCM key in the Android Keystore; it is deleted on sign-out, on an expired session, or on any decryption error. On launch the app resumes with the saved token and the server decides if it is still valid. The password is still never stored.
+- **Rationale**: Keeps the "no password at rest" rule. A stolen token is limited to the session's lifetime and can be killed by signing out or from Blue Iris, unlike a password. Option (c) can be added later if the server's session lifetime turns out to be too short.
+- **Impact**: `data/SessionStore.kt`, `data/BlueIrisClient.kt` (`restore`, `sessionToken`), `ui/AppViewModel.kt`. Backups already exclude all shared preferences. Reinstalling the app still signs out, because app data is deleted by design.
+
+### 2026-11-24, Live video container verified: H.264 Annex-B, cookie-only
+- **Context**: Owner ran the extended probe against Blue Iris 6.1.6.1.
+- **Decision**: `/video/{cam}/2.0` and `/thumbs/` accept the session cookie alone. The stream starts `blue`, a small header with width, height and the ASCII codec name `H264`, then typed blocks; start codes `00 00 00 01` are present, so payloads are Annex-B. This supports a MediaCodec decoder fed by our own block parser (no Media3 needed for H.264). H.265 is still unverified.
+- **Impact**: `docs/blue-iris-api.md` updated. Next code step is the container parser (with unit tests on invented byte data) and a single live-video screen.
+
+### 2026-11-24, Fingerprint unlock with saved password (replaces the saved session token)
+- **Context**: Owner does not want to sign in again after closing the app, and accepts saving the password if the app sits behind a fingerprint check. The token-only approach was built an hour earlier but kept the app open to anyone holding the phone.
+- **Options considered**: saved token (no lock); saved password with fingerprint; keeping both.
+- **Decision**: Reverses the "password never stored" rule from the Milestone 1 entry, with limits. On the sign-in form, "Remember me and unlock with my fingerprint" (shown only if the phone has a strong biometric) saves `{address, user, password}` encrypted with an AES-256-GCM Keystore key that needs a strong biometric for every use and is destroyed when fingerprints change. At launch (and after a sign-out or an expired session) the lock screen asks for the fingerprint, decrypts, and signs in silently. "Use password instead" and "Forget saved sign-in" are on the lock screen. If Blue Iris refuses the saved password, it is deleted. The session token is not saved; `SessionStore` and the client's `restore` were removed.
+- **Rationale**: The password never leaves the secure hardware unauthenticated, nothing is readable without the fingerprint, and a sign-in each launch means session lifetime on the server no longer matters.
+- **Impact**: `data/CredentialStore.kt`, `ui/LockScreen.kt`, `ui/LoginScreen.kt`, `ui/AppViewModel.kt`, `MainActivity.kt` (now a `FragmentActivity`), new dependency `androidx.biometric:biometric:1.1.0`. Backups still exclude all preferences. Fingerprints only (no device PIN fallback) because Keystore crypto with a PIN needs Android 11+ and minSdk is 26.
+
+### 2026-11-24, Minimum Android raised to 11 (API 30)
+- **Context**: Owner does not need Android 8 to Android 10. Supersedes minSdk 26 in the earlier stack entries.
+- **Decision**: `minSdk = 30`. The Keystore key now always uses `setUserAuthenticationParameters`, so the version check was removed. The launcher icon moved back to `mipmap-anydpi` (the earlier aapt2 failure was caused by minSdk 26).
+- **Impact**: `app/build.gradle.kts`, `README.md`, `CredentialStore.kt`, `res/mipmap-anydpi`. Android 11 also allows a device PIN or pattern as a fallback for the Keystore key if the owner ever wants it; not added.

@@ -14,7 +14,7 @@ An Android app for viewing [Blue Iris](https://blueirissoftware.com/) live camer
 ## Requirements (planned)
 - Blue Iris 5 or 6 with its web server on, reachable over HTTPS (for example through a reverse proxy).
 - A Blue Iris user account. A dedicated non-admin account is recommended.
-- Android 8.0 (API 26) or newer.
+- Android 11 (API 30) or newer.
 
 ## License
 GNU General Public License v3.0. See [LICENSE](LICENSE).

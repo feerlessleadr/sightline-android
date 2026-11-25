@@ -110,6 +110,38 @@ class BlueIrisClient(
         return CameraList.parse(reply.data)
     }
 
+    /**
+     * A current JPEG still of [camera] (a camera short name, or a group). Uses the session cookie only,
+     * so the token is never in the URL. [width] is clamped to a sane range.
+     */
+    suspend fun still(camera: String, width: Int = 480, quality: Int = 60): ByteArray {
+        if (session == null) throw SessionExpiredException()
+        val url = baseUrl.newBuilder()
+            .addPathSegment("image")
+            .addPathSegment(camera)
+            .addQueryParameter("w", width.coerceIn(80, 1920).toString())
+            .addQueryParameter("q", quality.coerceIn(10, 100).toString())
+            .build()
+        val request = Request.Builder().url(url).get().build()
+        return withContext(Dispatchers.IO) {
+            try {
+                http.newCall(request).execute().use { response ->
+                    if (response.isRedirect) throw SessionExpiredException()
+                    if (response.code == 401 || response.code == 403) throw SessionExpiredException()
+                    if (!response.isSuccessful) throw BlueIrisException("Blue Iris answered HTTP ${response.code}.")
+                    val type = response.header("Content-Type").orEmpty()
+                    if (!type.startsWith("image/", ignoreCase = true)) throw BlueIrisException("Blue Iris did not send a picture.")
+                    val source = response.body.source()
+                    source.request(MAX_IMAGE_BYTES + 1)
+                    if (source.buffer.size > MAX_IMAGE_BYTES) throw BlueIrisException("Blue Iris sent a picture that is too large.")
+                    source.readByteArray()
+                }
+            } catch (e: IOException) {
+                throw BlueIrisException("Can't reach Blue Iris.")
+            }
+        }
+    }
+
     /** Best effort: ends the server session and forgets it here either way. */
     suspend fun logout() {
         val token = session ?: return
@@ -180,5 +212,6 @@ class BlueIrisClient(
 
     private companion object {
         const val MAX_REPLY_BYTES = 8L * 1024 * 1024
+        const val MAX_IMAGE_BYTES = 6L * 1024 * 1024
     }
 }

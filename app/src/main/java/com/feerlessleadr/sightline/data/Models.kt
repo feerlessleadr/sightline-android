@@ -19,6 +19,7 @@ internal data class Envelope(
 )
 
 /** What the app keeps from a successful sign-in. Deliberately omits the server's location fields. */
+@Serializable
 data class LoginInfo(
     val systemName: String?,
     val version: String?,

@@ -82,5 +82,60 @@ try {
   }
 } catch { Write-Host ("cookie-only /image/: FAILED {0}" -f $_.Exception.Message) }
 
+# Milestone 2 probes: do /thumbs/ and /video/ also accept the cookie alone? What does the live stream start with?
+# Only status codes, content types and a few header bytes are printed. No picture or video data is saved.
+function New-CookieRequest([string]$url) {
+  $req = [System.Net.HttpWebRequest]::Create($url)
+  $req.AllowAutoRedirect = $false
+  $req.Timeout = 15000
+  $req.ReadWriteTimeout = 15000
+  $req.CookieContainer = New-Object System.Net.CookieContainer
+  $req.CookieContainer.Add([Uri]$BaseUrl, (New-Object System.Net.Cookie('session', $session, '/')))
+  $req
+}
+
+try {
+  $alerts = (Get-Content (Join-Path $OutDir 'alertlist.json') -Raw | ConvertFrom-Json).data
+  $first = $alerts | Where-Object { $_.path } | Select-Object -First 1
+  if ($first) {
+    $req = New-CookieRequest "$BaseUrl/thumbs/$($first.path)"
+    $resp = $req.GetResponse()
+    Write-Host ("cookie-only /thumbs/: HTTP {0}, {1}" -f [int]$resp.StatusCode, $resp.ContentType)
+    $resp.Close()
+  } else { Write-Host 'cookie-only /thumbs/: skipped (no alerts in the last 24 h)' }
+} catch [System.Net.WebException] {
+  $code = if ($_.Exception.Response) { [int]$_.Exception.Response.StatusCode } else { 'no response' }
+  Write-Host ("cookie-only /thumbs/: FAILED HTTP {0}" -f $code)
+} catch { Write-Host ("cookie-only /thumbs/: FAILED {0}" -f $_.Exception.Message) }
+
+try {
+  if ($cam) {
+    $req = New-CookieRequest "$BaseUrl/video/$([uri]::EscapeDataString($cam))/2.0"
+    $resp = $req.GetResponse()
+    Write-Host ("cookie-only /video/: HTTP {0}, {1}" -f [int]$resp.StatusCode, $resp.ContentType)
+    $stream = $resp.GetResponseStream()
+    $buf = New-Object byte[] 65536
+    $got = 0
+    while ($got -lt $buf.Length) {
+      $n = $stream.Read($buf, $got, $buf.Length - $got)
+      if ($n -le 0) { break }
+      $got += $n
+    }
+    $head = ($buf[0..([Math]::Min(31, $got - 1))] | ForEach-Object { $_.ToString('x2') }) -join ' '
+    $ascii = -join ($buf[0..([Math]::Min(15, $got - 1))] | ForEach-Object { if ($_ -ge 32 -and $_ -lt 127) { [char]$_ } else { '.' } })
+    $starts = 0
+    for ($i = 0; $i -lt $got - 3; $i++) {
+      if ($buf[$i] -eq 0 -and $buf[$i+1] -eq 0 -and $buf[$i+2] -eq 0 -and $buf[$i+3] -eq 1) { $starts++ }
+    }
+    Write-Host ("  read {0} bytes; first 32: {1}" -f $got, $head)
+    Write-Host ("  first 16 as text: {0}" -f $ascii)
+    Write-Host ("  00 00 00 01 start codes in that data: {0}" -f $starts)
+    $req.Abort()
+  }
+} catch [System.Net.WebException] {
+  $code = if ($_.Exception.Response) { [int]$_.Exception.Response.StatusCode } else { 'no response' }
+  Write-Host ("cookie-only /video/: FAILED HTTP {0}" -f $code)
+} catch { Write-Host ("cookie-only /video/: FAILED {0}" -f $_.Exception.Message) }
+
 try { Invoke-Bi @{ cmd = 'logout'; session = $session } | Out-Null } catch {}
 Write-Host "Saved samples to $OutDir (session token redacted). Do not commit them."

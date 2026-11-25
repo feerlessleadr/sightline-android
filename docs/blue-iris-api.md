@@ -71,9 +71,14 @@ This is why MediaCodec is the leading decoder choice: parse these blocks, feed a
 - **AI labels:** `memo` looks like `person:90%` or `vehicle:94%`, so label is the text before `:` and confidence the number after. Empty memo is a plain motion alert.
 - **Permissions:** `VERIFIED` the non-admin `test` user gets `{"result":"fail","data":{"reason":"Access denied"}}` for `log`. The app must show that message for the system log, not an error screen.
 
+## Verified 2026-11-24 (Blue Iris 6.1.6.1, owner-run probe)
+- A `session` cookie alone works for `/thumbs/{alert path}` (HTTP 200, `image/jpeg`) and `/video/{camera}/2.0` (HTTP 200, `video/mpeg`).
+- Live stream starts with ASCII `blue`, then bytes `01 28 28 00 00 00`, then width and height as little-endian 32-bit values (1920 x 1080 in the sample), `01 00 20 00`, the ASCII codec name `H264`, then typed blocks. The first 64 KB held three `00 00 00 01` start codes, so H.264 payloads are Annex-B. (The header layout beyond width, height and codec name is inferred from one sample.)
+
 ## Still to verify
-1. Cookie-only session for `/video/`, `/thumbs/`, `/file/clips/`, `/time/`.
-2. Whether live video payloads are Annex-B, and what an `H265` stream looks like.
+1. Cookie-only session for `/file/clips/` and `/time/`.
+2. What an `H265` stream looks like (cameras set to H.265).
+3. Exact container block framing on a longer capture (an in-app parser test will show this).
 3. What each bit in `alertlist.flags` means (flagged, protected, and the rest).
 4. `timeline`, `cliplist`, `ptz`, `update`, `export` response shapes.
 5. Which of those the non-admin user may call (`ptz`, `clips` and `clipcreate` flags are true for `test`).
