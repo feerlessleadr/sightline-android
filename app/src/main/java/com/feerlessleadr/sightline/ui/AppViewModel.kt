@@ -60,6 +60,9 @@ data class SessionState(
     val motionBoxes: Boolean = false,
     /** How sensitive the boxes are, 1 (only big movement) to 10 (almost any change); 5 is balanced. */
     val motionSensitivity: Int = 5,
+    /** Sound in the player (on or muted) and its volume, 0 to 2 (1 is normal). */
+    val soundOn: Boolean = true,
+    val volume: Float = 1f,
     /** False while Blue Iris cannot be reached (a network blip); the grid shows a "Reconnecting" banner. */
     val online: Boolean = true,
     /** Size of the one-camera video stream. */
@@ -418,10 +421,10 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
 
     /** The player's calls to Blue Iris (live and recorded video, stills, timeline, alerts). */
     val playerApi = PlayerApi(
-        openLive = { camera, size -> guarded { it.openVideo(camera, size) } },
-        openRecorded = { camera, pos, speed, size -> guarded { it.openRecorded(camera, pos, speed, size) } },
+        openLive = { camera, size, audio -> guarded { it.openVideo(camera, size, audio) } },
+        openRecorded = { camera, pos, speed, size, audio -> guarded { it.openRecorded(camera, pos, speed, size, audio) } },
         liveStill = { camera, width -> fetchStill(camera, width) },
-        openClip = { file, offset, speed, size -> guarded { it.openClip(file, offset, speed, size) } },
+        openClip = { file, offset, speed, size, audio -> guarded { it.openClip(file, offset, speed, size, audio) } },
         recordedStill = { camera, pos, width -> guarded { it.recordedStill(camera, pos, width) } },
         timeline = { camera, start, end, step -> guarded { it.timeline(camera, start, end, step) } },
         alerts = { camera, start, end -> guarded { it.cameraAlerts(camera, start, end) } },
@@ -455,6 +458,8 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         highlight = prefs.getBoolean(KEY_HIGHLIGHT, true),
         aiLabels = prefs.getBoolean(KEY_AI_LABELS, true),
         motionBoxes = prefs.getBoolean(KEY_MOTION_BOXES, false),
+        soundOn = prefs.getBoolean(KEY_SOUND_ON, true),
+        volume = prefs.getFloat(KEY_VOLUME, 1f).coerceIn(0f, 2f),
         motionSensitivity = prefs.getInt(KEY_MOTION_SENS, 5).coerceIn(1, 10),
         quality = VideoQuality.entries.firstOrNull { it.name == prefs.getString(KEY_QUALITY, null) } ?: VideoQuality.Auto,
         lockAfter = lockAfter,
@@ -464,6 +469,13 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     fun setHighlight(on: Boolean) {
         prefs.edit().putBoolean(KEY_HIGHLIGHT, on).apply()
         _state.update { s -> s.session?.let { s.copy(session = it.copy(highlight = on)) } ?: s }
+    }
+
+    /** Remembers the sound setting (on or muted) and volume on this phone. */
+    fun setSound(on: Boolean, volume: Float) {
+        val v = volume.coerceIn(0f, 2f)
+        prefs.edit().putBoolean(KEY_SOUND_ON, on).putFloat(KEY_VOLUME, v).apply()
+        _state.update { s -> s.session?.let { s.copy(session = it.copy(soundOn = on, volume = v)) } ?: s }
     }
 
     fun setMotionBoxes(on: Boolean) {
@@ -703,6 +715,8 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         const val KEY_HIGHLIGHT = "highlight_active"
         const val KEY_AI_LABELS = "ai_labels"
         const val KEY_MOTION_BOXES = "motion_boxes"
+        const val KEY_SOUND_ON = "sound_on"
+        const val KEY_VOLUME = "sound_volume"
         const val KEY_MOTION_SENS = "motion_sensitivity"
         const val KEY_QUALITY = "video_quality"
         const val KEY_LOCK_AFTER = "lock_after"

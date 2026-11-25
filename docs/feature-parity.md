@@ -53,7 +53,7 @@ Status: **Done**, **Partial**, **Planned (Mn)**, **N/A** (with the reason). "And
 ## Player
 | Web feature | Status |
 |---|---|
-| Live video of one camera with audio, and volume slider / mute | Partial: video first version done (black screen being fixed); audio and volume M3 |
+| Live video of one camera with audio, and volume slider / mute | Done (M3: speaker button, mute, volume 0-200%, remembered) |
 | Recorded video from `/time/` and `/file/clips/`, speed up to 16x | Done: `/time/` and speeds 1-16x; alerts play from their `/file/clips/` file (M3) |
 | Scrubbable timeline with colour-coded alert marks, zoom 30 s to 7 d (pinch), buttons 2m 15m 1h 6h 24h 48h, midnight day labels, "now" stays at the right edge live | Done (M3 stage 1; pinch zoom, buttons, day labels, now at the right edge) |
 | Go to date and time: quick choices (Last hour, This morning, Last night, Yesterday, This time yesterday, This time last week) and a calendar with from/to times; days with no recordings greyed, days with alerts dotted | Done (M3: quick choices, month calendar with recorded days, alert dots, from/to times) |

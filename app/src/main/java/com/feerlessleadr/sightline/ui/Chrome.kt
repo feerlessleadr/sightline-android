@@ -53,7 +53,7 @@ fun SlLogo(size: Dp = 28.dp) {
     }
 }
 
-enum class Glyph { Refresh, FullScreen, ExitFullScreen, Menu, Live, Alerts, Play, Pause, PrevAlert, NextAlert, Calendar }
+enum class Glyph { Refresh, FullScreen, ExitFullScreen, Menu, Live, Alerts, Play, Pause, PrevAlert, NextAlert, Calendar, Sound, Muted }
 
 /** Small line icons drawn by hand, so the app needs no icon library. */
 @Composable
@@ -77,6 +77,20 @@ fun GlyphIcon(glyph: Glyph, color: Color, size: Dp = 22.dp) {
             Glyph.Live -> {
                 drawCircle(color, radius = s * 0.38f, style = st)
                 drawCircle(color, radius = s * 0.14f)
+            }
+            Glyph.Sound, Glyph.Muted -> {
+                val speaker = Path().apply {
+                    moveTo(s * 0.14f, s * 0.38f); lineTo(s * 0.32f, s * 0.38f); lineTo(s * 0.52f, s * 0.20f)
+                    lineTo(s * 0.52f, s * 0.80f); lineTo(s * 0.32f, s * 0.62f); lineTo(s * 0.14f, s * 0.62f); close()
+                }
+                drawPath(speaker, color)
+                if (glyph == Glyph.Sound) {
+                    drawArc(color, -45f, 90f, false, Offset(s * 0.38f, s * 0.32f), Size(s * 0.36f, s * 0.36f), style = st)
+                    drawArc(color, -45f, 90f, false, Offset(s * 0.26f, s * 0.20f), Size(s * 0.60f, s * 0.60f), style = st)
+                } else {
+                    drawLine(color, Offset(s * 0.64f, s * 0.38f), Offset(s * 0.88f, s * 0.62f), strokeWidth = w, cap = StrokeCap.Round)
+                    drawLine(color, Offset(s * 0.88f, s * 0.38f), Offset(s * 0.64f, s * 0.62f), strokeWidth = w, cap = StrokeCap.Round)
+                }
             }
             Glyph.Calendar -> {
                 drawRoundRect(color, Offset(s * 0.16f, s * 0.22f), Size(s * 0.68f, s * 0.62f), CornerRadius(s * 0.08f), style = st)

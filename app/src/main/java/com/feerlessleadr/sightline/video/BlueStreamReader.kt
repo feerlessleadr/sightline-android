@@ -3,14 +3,22 @@ package com.feerlessleadr.sightline.video
 import okio.BufferedSource
 
 /** What the stream header says about the picture. */
-data class StreamHeader(val width: Int, val height: Int, val isHevc: Boolean)
+/** How the sound in a stream is stored (a WAVEFORMATEX after the picture header): [tag] 7 is mu-law. */
+data class AudioFormat(val tag: Int, val channels: Int, val sampleRate: Int) {
+    /** The only kind Blue Iris sends and the app plays: 8-bit mu-law, one channel. */
+    val isMuLawMono: Boolean get() = tag == 7 && channels == 1 && sampleRate > 0
+}
+
+/** What the stream header says about the picture, and the sound if there is any. */
+data class StreamHeader(val width: Int, val height: Int, val isHevc: Boolean, val audio: AudioFormat? = null)
 
 sealed interface StreamBlock {
     /** One encoded access unit (Annex-B H.264 or H.265). */
     /** [utcMillis] is when the frame was recorded (or captured, for live video), in milliseconds since 1970; 0 if unknown. */
     class Video(val data: ByteArray, val utcMillis: Long = 0L, val rawMillis: Long = 0L) : StreamBlock
 
-    data object Audio : StreamBlock
+    /** One piece of sound: [data] is the raw samples (mu-law, one byte each). */
+    class Audio(val data: ByteArray) : StreamBlock
     data object Status : StreamBlock
     data object End : StreamBlock
 }
@@ -37,7 +45,18 @@ class BlueStreamReader(private val source: BufferedSource) {
         val height = littleEndianInt(header, 8)
         if (width !in 1..16384 || height !in 1..16384) throw StreamFormatException("The video stream has an odd picture size.")
         val codec = String(header, 16, 4, Charsets.US_ASCII)
-        return StreamHeader(width, height, isHevc = codec == "H265")
+        // After the 40-byte picture header (its own size is in its first four bytes) comes the sound format, if any.
+        val pictureSize = littleEndianInt(header, 0)
+        val audio = if (pictureSize in 20..length && length - pictureSize >= 14) {
+            AudioFormat(
+                tag = (header[pictureSize].toInt() and 0xFF) or ((header[pictureSize + 1].toInt() and 0xFF) shl 8),
+                channels = (header[pictureSize + 2].toInt() and 0xFF) or ((header[pictureSize + 3].toInt() and 0xFF) shl 8),
+                sampleRate = littleEndianInt(header, pictureSize + 4),
+            )
+        } else {
+            null
+        }
+        return StreamHeader(width, height, isHevc = codec == "H265", audio = audio)
     }
 
     fun next(): StreamBlock {
@@ -48,8 +67,7 @@ class BlueStreamReader(private val source: BufferedSource) {
             1 -> {
                 val size = source.readInt()
                 if (size < 0 || size > MAX_BLOCK) throw StreamFormatException("Bad audio block in the video stream.")
-                source.skip(size.toLong())
-                StreamBlock.Audio
+                StreamBlock.Audio(source.readByteArray(size.toLong()))
             }
             2 -> {
                 val size = (source.readByte().toInt() and 0xFF) - 6

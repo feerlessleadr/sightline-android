@@ -43,7 +43,7 @@ class BlueStreamReaderTest {
         assertEquals(StreamHeader(1280, 720, isHevc = true), hevc.readHeader())
     }
 
-    @Test fun `big-endian video blocks are read, audio and status skipped, end recognised`() {
+    @Test fun `big-endian video blocks are read, audio samples kept, status skipped, end recognised`() {
         val b = Buffer().writeStreamHeader()
         b.writeVideo(annexB, bigEndian = true)
         b.writeUtf8("Blue"); b.writeByte(1); b.writeInt(3); b.write(byteArrayOf(9, 9, 9))
@@ -53,7 +53,7 @@ class BlueStreamReaderTest {
         val reader = BlueStreamReader(b)
         reader.readHeader()
         assertArrayEquals(annexB, (reader.next() as StreamBlock.Video).data)
-        assertEquals(StreamBlock.Audio, reader.next())
+        assertArrayEquals(byteArrayOf(9, 9, 9), (reader.next() as StreamBlock.Audio).data)
         assertEquals(StreamBlock.Status, reader.next())
         assertArrayEquals(annexB, (reader.next() as StreamBlock.Video).data)
         assertEquals(StreamBlock.End, reader.next())

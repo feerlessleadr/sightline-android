@@ -88,6 +88,9 @@ class MainActivity : FragmentActivity() {
                         camera = live,
                         quality = session.quality,
                         api = viewModel.playerApi,
+                        soundOn = session.soundOn,
+                        volume = session.volume,
+                        onSound = viewModel::setSound,
                         onQuality = viewModel::setQuality,
                         onBack = { liveCamera = null },
                     )

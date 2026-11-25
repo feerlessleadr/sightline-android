@@ -42,7 +42,10 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.DatePicker
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.Slider
+import androidx.compose.foundation.layout.width
+import kotlin.math.roundToInt
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
@@ -55,6 +58,8 @@ import androidx.compose.material3.rememberDatePickerState
 import androidx.compose.material3.rememberTimePickerState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.SideEffect
+import com.feerlessleadr.sightline.video.MuLawPlayer
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
@@ -107,9 +112,9 @@ import kotlinx.coroutines.withContext
 
 /** What the player asks Blue Iris for. */
 class PlayerApi(
-    val openLive: suspend (camera: String, size: StreamRequest?) -> VideoStream,
-    val openRecorded: suspend (camera: String, positionMs: Long, speedPercent: Int, size: StreamRequest?) -> VideoStream,
-    val openClip: suspend (file: String, offsetMs: Long, speedPercent: Int, size: StreamRequest?) -> VideoStream,
+    val openLive: suspend (camera: String, size: StreamRequest?, audio: Boolean) -> VideoStream,
+    val openRecorded: suspend (camera: String, positionMs: Long, speedPercent: Int, size: StreamRequest?, audio: Boolean) -> VideoStream,
+    val openClip: suspend (file: String, offsetMs: Long, speedPercent: Int, size: StreamRequest?, audio: Boolean) -> VideoStream,
     val liveStill: suspend (camera: String, width: Int) -> ByteArray?,
     val recordedStill: suspend (camera: String, positionMs: Long, width: Int) -> ByteArray,
     val timeline: suspend (camera: String, startMs: Long, endMs: Long, msecPerStep: Long) -> Timeline,
@@ -132,6 +137,9 @@ fun PlayerScreen(
     camera: Camera,
     quality: VideoQuality,
     api: PlayerApi,
+    soundOn: Boolean,
+    volume: Float,
+    onSound: (on: Boolean, volume: Float) -> Unit,
     onQuality: (VideoQuality) -> Unit,
     onBack: () -> Unit,
 ) {
@@ -162,6 +170,16 @@ fun PlayerScreen(
     var timelineNote by remember(id) { mutableStateOf<String?>(null) }
     var alerts by remember(id) { mutableStateOf<List<AlertItem>>(emptyList()) }
     val frameUtc = remember { AtomicLong(0L) }
+
+    // Sound: the stream is asked to include audio once sound has been on (and stays so until the player closes, so
+    // muting is instant); playback volume goes through the player, 0 = muted.
+    val sound = remember { MuLawPlayer() }
+    var askAudio by remember { mutableStateOf(soundOn && volume > 0f) }
+    var streamHasAudio by remember(id) { mutableStateOf<Boolean?>(null) }
+    var showVolume by remember { mutableStateOf(false) }
+    LaunchedEffect(soundOn, volume) { if (soundOn && volume > 0f) askAudio = true }
+    SideEffect { sound.gain = if (soundOn) volume else 0f }
+    DisposableEffect(sound) { onDispose { sound.stop() } }
     var clip by remember(id) { mutableStateOf<AlertClip?>(null) }
     // What the calendar learned about each month for this camera, kept while the player is open.
     val monthCache = remember(id) { HashMap<java.time.YearMonth, com.feerlessleadr.sightline.video.MonthInfo>() }
@@ -272,7 +290,7 @@ fun PlayerScreen(
     }
 
     // The picture: a live or recorded stream, whenever it is wanted and the video surface exists.
-    LaunchedEffect(surface, live, playing, scrubbing, serial, streamSize, attempt, id) {
+    LaunchedEffect(surface, live, playing, scrubbing, serial, streamSize, attempt, id, askAudio) {
         val target = surface
         if (target == null || scrubbing || !(live || playing)) {
             if (streaming) still = null // the surface keeps the last frame; do not cover it with an older still
@@ -294,16 +312,16 @@ fun PlayerScreen(
             // timeline shows an alert cropped to a corner); anywhere else, or if the file cannot be had, the timeline.
             val fileClip = if (isLive) null else clipFor(startAt)
             val stream = when {
-                isLive -> api.openLive(id, size)
+                isLive -> api.openLive(id, size, askAudio)
                 fileClip != null -> try {
-                    api.openClip(fileClip.file, startAt - fileClip.start, atSpeed * 100, size).also { fromFile = true }
+                    api.openClip(fileClip.file, startAt - fileClip.start, atSpeed * 100, size, askAudio && atSpeed == 1).also { fromFile = true }
                 } catch (e: SessionExpiredException) {
                     throw e
                 } catch (e: BlueIrisException) {
                     clip = fileClip.copy(broken = true) // do not try this file again
-                    api.openRecorded(id, startAt, atSpeed * 100, size)
+                    api.openRecorded(id, startAt, atSpeed * 100, size, askAudio && atSpeed == 1)
                 }
-                else -> api.openRecorded(id, startAt, atSpeed * 100, size)
+                else -> api.openRecorded(id, startAt, atSpeed * 100, size, askAudio && atSpeed == 1)
             }
             val connected = SystemClock.elapsedRealtime() - started
             status = "Waiting for the first picture…"
@@ -324,6 +342,8 @@ fun PlayerScreen(
                 onFrameTime = { frameUtc.set(it) },
                 speed = if (isLive) null else atSpeed.toFloat(),
                 clipBaseMs = if (fromFile) startAt else null,
+                audio = sound,
+                onHasAudio = { streamHasAudio = it },
             )
         } catch (e: CancellationException) {
             throw e
@@ -439,7 +459,30 @@ fun PlayerScreen(
             TopAppBar(
                 title = { Text(camera.displayName) },
                 navigationIcon = { TextButton(onClick = onBack) { Text("Back") } },
-                actions = { TextButton(onClick = { pickQuality = true }) { Text(quality.label.uppercase()) } },
+                actions = {
+                    Box {
+                        IconAction(if (soundOn && volume > 0f) Glyph.Sound else Glyph.Muted, "Volume") { showVolume = true }
+                        DropdownMenu(expanded = showVolume, onDismissRequest = { showVolume = false }) {
+                            Row(Modifier.padding(horizontal = 12.dp), verticalAlignment = Alignment.CenterVertically) {
+                                IconAction(if (soundOn) Glyph.Sound else Glyph.Muted, if (soundOn) "Mute" else "Unmute") {
+                                    val on = !soundOn
+                                    onSound(on, if (on && volume == 0f) 1f else volume)
+                                }
+                                Slider(
+                                    value = if (soundOn) volume else 0f,
+                                    onValueChange = { onSound(it > 0f, it) },
+                                    valueRange = 0f..2f,
+                                    modifier = Modifier.width(160.dp),
+                                )
+                                Text(if (soundOn) "${(volume * 100).roundToInt()}%" else "Muted", modifier = Modifier.padding(start = 8.dp), fontSize = 13.sp)
+                            }
+                            if (askAudio && streamHasAudio == false) {
+                                Text("This camera is not sending sound.", color = Sl.Muted, fontSize = 12.sp, modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp))
+                            }
+                        }
+                    }
+                    TextButton(onClick = { pickQuality = true }) { Text(quality.label.uppercase()) }
+                },
             )
         },
     ) { padding ->

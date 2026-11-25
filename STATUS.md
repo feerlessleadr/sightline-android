@@ -16,7 +16,7 @@ Parity with the web app Sightline for Blue Iris (https://github.com/rw377/Sightl
 
 ## Next steps
 1. Owner tests M3 stage 1 (list below); fix what the real server shows (timeline reply shape and `/time/` parameters come from the web source and are unverified).
-2. M3 stage 2: PTZ pad, audio and volume, tap/double-tap and floating controls, full screen and landscape. Stage 3: group view. Stage 4: download as MP4, flag/protect.
+2. M3 stage 2: PTZ pad (last), tap/double-tap and floating controls, full screen and landscape. Stage 3: group view. Stage 4: download as MP4, flag/protect.
 3. M4 alerts tab, M5 settings/server/log/activity/pop-ups/About, M6 CI/CodeQL/Dependabot/signing/tablets/accessibility.
 4. Lint leftovers (warnings only): `SharedPreferences.edit` KTX suggestion, version bumps.
 
@@ -27,6 +27,7 @@ Install the new debug APK, open a camera, and check:
 - Play/pause, -10 s, +10 s, speed button (1/2/4/8/16x), LIVE button.
 - Previous/next alert buttons jump to an alert and play from 2 s before it.
 - Calendar (calendar button, bottom row): month grid, days with no recording greyed, dots on days with alerts, arrows change month, pick From and To times and tap Go; quick choices on top.
+- Sound: speaker button in the top bar (mute, volume slider up to 200%); on a camera with sound you should hear it live and in recordings at 1x; muting is instant; the setting is remembered.
 - Layout: the picture is centred in the free space with the controls at the bottom (timeline, then 2m..48h with the calendar button, speed, LIVE, then play/pause row). Pinch the picture: it must stay visible, grow into the space above and below, pan with one finger, double tap or the badge resets; in Auto quality it gets sharper after a moment. Pinch the timeline; calendar button = go to date and time.
 - If a recording will not play, the message over the picture has a Retry button and the details; send me what it says.
 

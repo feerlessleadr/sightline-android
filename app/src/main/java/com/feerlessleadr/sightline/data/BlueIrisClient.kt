@@ -200,10 +200,11 @@ class BlueIrisClient(
      * Opens an alert's recording file (`/file/clips/`) from [offsetMs] into it, played at [speedPercent]. Same container as
      * live video; the caller falls back to the timeline if Blue Iris refuses.
      */
-    suspend fun openClip(file: String, offsetMs: Long, speedPercent: Int, size: StreamRequest? = null): VideoStream =
+    suspend fun openClip(file: String, offsetMs: Long, speedPercent: Int, size: StreamRequest? = null, audio: Boolean = false): VideoStream =
         openStream(
             listOf("file", "clips", file), size,
             listOf("speed" to speedPercent.coerceIn(10, 1600).toString(), "time" to offsetMs.coerceAtLeast(0).toString()),
+            audio,
         )
 
     /**
@@ -277,27 +278,33 @@ class BlueIrisClient(
      * Opens the live video stream of [camera]. The caller reads [VideoStream.source] and must close it.
      * Cookie only, HTTPS only, no redirects. The call has no overall time limit, but stalls of 20 s end it.
      */
-    suspend fun openVideo(camera: String, size: StreamRequest? = null): VideoStream =
-        openStream(listOf("video", camera, "2.0"), size, emptyList())
+    suspend fun openVideo(camera: String, size: StreamRequest? = null, audio: Boolean = false): VideoStream =
+        openStream(listOf("video", camera, "2.0"), size, emptyList(), audio)
 
     /**
      * Opens recorded video of [camera] starting at [positionMs] (milliseconds since 1970), played by Blue Iris at
      * [speedPercent] (100 = normal) from its timeline (`/time/`), the way the web app does. Same container as live video.
      */
-    suspend fun openRecorded(camera: String, positionMs: Long, speedPercent: Int, size: StreamRequest? = null): VideoStream =
+    suspend fun openRecorded(camera: String, positionMs: Long, speedPercent: Int, size: StreamRequest? = null, audio: Boolean = false): VideoStream =
         openStream(
             listOf("time", camera), size,
             listOf("opaque" to opaqueId, "pos" to positionMs.toString(), "speed" to speedPercent.coerceIn(10, 1600).toString()),
+            audio,
         )
 
     /** A random label the web app also sends with recorded streams; it only has to stay the same for this run. */
     private val opaqueId = "sv" + java.util.UUID.randomUUID().toString().replace("-", "").take(8)
 
-    private suspend fun openStream(segments: List<String>, size: StreamRequest?, extra: List<Pair<String, String>>): VideoStream {
+    private suspend fun openStream(
+        segments: List<String>,
+        size: StreamRequest?,
+        extra: List<Pair<String, String>>,
+        audio: Boolean = false,
+    ): VideoStream {
         if (session == null) throw SessionExpiredException()
         val url = baseUrl.newBuilder()
             .apply { segments.forEach { addPathSegment(it) } }
-            .addQueryParameter("audio", "0")
+            .addQueryParameter("audio", if (audio) "1" else "0")
             .addQueryParameter("stream", "0")
             .apply { extra.forEach { (k, v) -> addQueryParameter(k, v) } }
             .apply {

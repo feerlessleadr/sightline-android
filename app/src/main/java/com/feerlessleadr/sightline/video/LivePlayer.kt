@@ -57,6 +57,10 @@ suspend fun playLive(
      * date, so frame times are then this plus the time since the first frame.
      */
     clipBaseMs: Long? = null,
+    /** Plays the stream's sound (if it has any) through this; null = silent. */
+    audio: MuLawPlayer? = null,
+    /** Told once, after the header, whether the stream carries sound this phone can play. */
+    onHasAudio: (Boolean) -> Unit = {},
 ) {
     withContext(Dispatchers.IO) {
         // Cancelling the coroutine closes the connection, which unblocks the read below.
@@ -70,6 +74,9 @@ suspend fun playLive(
             var firstFrameMs = -1L
             var firstShownMs = -1L
             onSize(header.width, header.height)
+            val playSound = audio != null && header.audio?.isMuLawMono == true
+            onHasAudio(playSound)
+            if (playSound) audio!!.start(header.audio!!.sampleRate)
             val mime = if (header.isHevc) MediaFormat.MIMETYPE_VIDEO_HEVC else MediaFormat.MIMETYPE_VIDEO_AVC
             val name = if (header.isHevc) "H265" else "H264"
             val format = MediaFormat.createVideoFormat(mime, header.width, header.height).apply {
@@ -155,6 +162,7 @@ suspend fun playLive(
                             onStats(PlayStats(name, header.width, header.height, frames, keys, shown, headerMs, firstFrameMs, firstShownMs))
                         }
                     }
+                    is StreamBlock.Audio -> if (playSound) audio!!.push(block.data)
                     StreamBlock.End -> throw StreamEndedException()
                     else -> Unit
                 }
@@ -170,6 +178,7 @@ suspend fun playLive(
             if (isActive) throw BlueIrisException("This phone could not decode the video.")
         } finally {
             onCancel.dispose()
+            audio?.stop()
             codec?.let {
                 runCatching { it.stop() }
                 runCatching { it.release() }
