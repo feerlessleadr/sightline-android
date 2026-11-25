@@ -74,8 +74,8 @@ class MotionDetector(private val sensitivity: () -> Int) {
         source = ""
     }
 
-    /** Boxes still worth drawing at [nowMs]. */
-    fun visible(nowMs: Long): List<MotionBox> = boxes.filter { nowMs - it.t < LINGER_MS }
+    /** Boxes still worth drawing at [nowMs]; the grid shows them for [lingerMs] (2.2 s), the player for 0.9 s. */
+    fun visible(nowMs: Long, lingerMs: Long = LINGER_MS): List<MotionBox> = boxes.filter { nowMs - it.t < lingerMs }
 
     /**
      * Compares [sample] with the previous one from the same [source] ("live", "own", "still"...). [pictureW] and

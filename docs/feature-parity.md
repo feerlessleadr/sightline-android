@@ -65,7 +65,7 @@ Status: **Done**, **Partial**, **Planned (Mn)**, **N/A** (with the reason). "And
 | Digital zoom to 8x, pinch and pan, sharper stream while zoomed (Auto quality) | Done (pinch, pan, double tap or badge to reset; sharper stream in Auto) |
 | Quality picker Auto, 480p to 4K with data rates and live rx rate; sizes and bitrates from the tier table | Partial: picker and tiers done (player button and Settings); live receive rate M3 |
 | PTZ pad (8 directions, zoom), Home (or preset named Home), preset list, stop on release/leave/30 s/slide-off, retry 30 s; only for PTZ cameras with permission | Planned (M3) |
-| Motion boxes in the player with sensitivity | Planned (M3) |
+| Motion boxes in the player with sensitivity | Done (M3: boxes button; sensitivity in Settings) |
 | Rewind without Blue Iris's timeline (older 5.x): clip-list fallback, "Rewinding needs a newer Blue Iris" | Planned (M3) |
 | Alerts play from their recording file, carry on from the timeline outside it | Done (M3; falls back to the timeline if the file cannot be opened) |
 | Restart at new size if a recording changes picture size | Planned (M3) |

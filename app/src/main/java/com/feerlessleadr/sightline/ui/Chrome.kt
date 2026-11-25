@@ -53,7 +53,7 @@ fun SlLogo(size: Dp = 28.dp) {
     }
 }
 
-enum class Glyph { Refresh, FullScreen, ExitFullScreen, Menu, Live, Alerts, Play, Pause, PrevAlert, NextAlert, Calendar, Sound, Muted, FrameBack, FrameForward }
+enum class Glyph { Refresh, FullScreen, ExitFullScreen, Menu, Live, Alerts, Play, Pause, PrevAlert, NextAlert, Calendar, Sound, Muted, FrameBack, FrameForward, Boxes }
 
 /** Small line icons drawn by hand, so the app needs no icon library. */
 @Composable
@@ -91,6 +91,10 @@ fun GlyphIcon(glyph: Glyph, color: Color, size: Dp = 22.dp) {
                     drawLine(color, Offset(s * 0.64f, s * 0.38f), Offset(s * 0.88f, s * 0.62f), strokeWidth = w, cap = StrokeCap.Round)
                     drawLine(color, Offset(s * 0.88f, s * 0.38f), Offset(s * 0.64f, s * 0.62f), strokeWidth = w, cap = StrokeCap.Round)
                 }
+            }
+            Glyph.Boxes -> {
+                drawRoundRect(color, Offset(s * 0.14f, s * 0.20f), Size(s * 0.72f, s * 0.60f), CornerRadius(s * 0.06f), style = st)
+                drawRect(color, Offset(s * 0.34f, s * 0.38f), Size(s * 0.30f, s * 0.26f), style = st)
             }
             Glyph.FrameBack -> {
                 drawPath(Path().apply { moveTo(s * 0.62f, s * 0.22f); lineTo(s * 0.32f, s * 0.5f); lineTo(s * 0.62f, s * 0.78f) }, color, style = st)
@@ -156,14 +160,14 @@ private fun androidx.compose.ui.graphics.drawscope.DrawScope.corners(color: Colo
 
 /** A round 44 dp touch target with an icon. */
 @Composable
-fun IconAction(glyph: Glyph, label: String, onClick: () -> Unit) {
+fun IconAction(glyph: Glyph, label: String, tint: Color = Sl.Text, onClick: () -> Unit) {
     Box(
         Modifier
             .size(44.dp)
             .semantics { contentDescription = label }
             .clickable(role = Role.Button, onClick = onClick),
         contentAlignment = Alignment.Center,
-    ) { GlyphIcon(glyph, Sl.Text) }
+    ) { GlyphIcon(glyph, tint) }
 }
 
 /** Logo, the "Sightline for Blue Iris" tag above the server name, and the header buttons. */
@@ -183,9 +187,9 @@ fun SightlineHeader(serverName: String, onFullScreen: () -> Unit, onRefresh: () 
             Text("SIGHTLINE FOR BLUE IRIS", fontSize = 10.sp, letterSpacing = 1.sp, color = Sl.Muted, maxLines = 1)
             Text(serverName, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold, maxLines = 1)
         }
-        IconAction(Glyph.FullScreen, "Full screen", onFullScreen)
-        IconAction(Glyph.Refresh, "Refresh", onRefresh)
-        IconAction(Glyph.Menu, "Menu", onMenu)
+        IconAction(Glyph.FullScreen, "Full screen", onClick = onFullScreen)
+        IconAction(Glyph.Refresh, "Refresh", onClick = onRefresh)
+        IconAction(Glyph.Menu, "Menu", onClick = onMenu)
     }
     Box(Modifier.fillMaxWidth().height(1.dp).background(Sl.Line))
 }

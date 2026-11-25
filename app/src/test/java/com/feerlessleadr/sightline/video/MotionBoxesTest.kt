@@ -84,6 +84,17 @@ class MotionBoxesTest {
     }
 
     @Test
+    fun thePlayerShowsBoxesForLessTimeThanTheGrid() {
+        val d = MotionDetector { 5 }
+        d.update(withSquare(10, 10, 8), "still", 0)
+        d.update(withSquare(10, 10, 8), "still", 2_000)
+        d.update(withSquare(80, 40, 16), "still", 2_600)
+        assertTrue(d.visible(2_600 + 800, 900L).isNotEmpty())
+        assertTrue(d.visible(2_600 + 1_000, 900L).isEmpty())
+        assertTrue(d.visible(2_600 + 1_000).isNotEmpty()) // the grid's 2.2 s
+    }
+
+    @Test
     fun boxesFadeAway() {
         val d = MotionDetector { 5 }
         d.update(withSquare(10, 10, 8), "still", 0)

@@ -590,7 +590,7 @@ private fun CameraTile(
 }
 
 /** A small greyscale copy of [bmp], 128 pixels wide, for the motion detector. */
-private fun graySampleOf(bmp: Bitmap): GraySample {
+internal fun graySampleOf(bmp: Bitmap): GraySample {
     val w = MotionDetector.SAMPLE_WIDTH
     val h = maxOf(8, (w * bmp.height / bmp.width.toFloat()).roundToInt())
     val small = Bitmap.createScaledBitmap(bmp, w, h, true)

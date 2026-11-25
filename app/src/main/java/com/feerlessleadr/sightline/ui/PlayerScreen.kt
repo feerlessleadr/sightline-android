@@ -33,10 +33,12 @@ import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.graphics.TransformOrigin
+import androidx.compose.ui.graphics.drawscope.withTransform
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.input.pointer.positionChanged
 import kotlinx.coroutines.flow.collectLatest
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -74,6 +76,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.rememberUpdatedState
+import com.feerlessleadr.sightline.video.MotionDetector
 import com.feerlessleadr.sightline.video.MuLawPlayer
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -87,6 +90,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.ImageBitmap
+import androidx.compose.ui.graphics.asAndroidBitmap
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalResources
@@ -158,6 +162,9 @@ fun PlayerScreen(
     api: PlayerApi,
     cameras: List<Camera>,
     onSwitchCamera: (Camera) -> Unit,
+    motionBoxes: Boolean,
+    sensitivity: Int,
+    onMotionBoxes: (Boolean) -> Unit,
     soundOn: Boolean,
     volume: Float,
     onSound: (on: Boolean, volume: Float) -> Unit,
@@ -588,6 +595,47 @@ fun PlayerScreen(
         }
         swipeBusy = false
     }
+    // Motion boxes: the picture on screen (video or still) is sampled small about every 150 ms and compared with the
+    // last one, like the web app; a new stream starts the comparison over.
+    val currentSensitivity by rememberUpdatedState(sensitivity)
+    val detector = remember(id) { MotionDetector { currentSensitivity } }
+    val boxTick = remember { mutableLongStateOf(0L) }
+    LaunchedEffect(motionBoxes, id, live, serial) {
+        if (!motionBoxes) {
+            detector.reset()
+            return@LaunchedEffect
+        }
+        var lastFrame = 0L
+        var lastStill: ImageBitmap? = null
+        while (true) {
+            delay(150)
+            val now = SystemClock.uptimeMillis()
+            val tv = textureHolder[0]
+            if (swipeOffset == 0f) {
+                if (streaming && tv != null && tv.isAvailable) {
+                    val frame = frameUtc.get()
+                    if (frame != lastFrame) {
+                        lastFrame = frame
+                        val bitmap = runCatching {
+                            tv.getBitmap(MotionDetector.SAMPLE_WIDTH, (MotionDetector.SAMPLE_WIDTH / aspect).roundToInt().coerceAtLeast(8))
+                        }.getOrNull()
+                        if (bitmap != null) {
+                            val sample = withContext(Dispatchers.Default) { graySampleOf(bitmap) }
+                            detector.update(sample, (if (live) "live-" else "rec-") + id + "-" + serial, now)
+                        }
+                    }
+                } else if (!streaming) {
+                    val picture = still
+                    if (picture != null && picture !== lastStill && picture.width > 1) {
+                        lastStill = picture
+                        val sample = withContext(Dispatchers.Default) { graySampleOf(picture.asAndroidBitmap()) }
+                        detector.update(sample, "still-" + id, now)
+                    }
+                }
+            }
+            boxTick.longValue = now
+        }
+    }
     val onStageDoubleTap by rememberUpdatedState<() -> Unit> {
         lastTouch = SystemClock.elapsedRealtime()
         if (zoom > 1f) {
@@ -625,6 +673,11 @@ fun PlayerScreen(
     val fullScreenButton: @Composable () -> Unit = {
         IconAction(if (fullScreen) Glyph.ExitFullScreen else Glyph.FullScreen, if (fullScreen) "Exit full screen" else "Full screen") {
             fullScreen = !fullScreen
+        }
+    }
+    val boxesButton: @Composable () -> Unit = {
+        IconAction(Glyph.Boxes, if (motionBoxes) "Motion boxes on" else "Motion boxes off", tint = if (motionBoxes) Sl.Accent else Sl.Text) {
+            onMotionBoxes(!motionBoxes)
         }
     }
     val qualityButton: @Composable () -> Unit = {
@@ -825,6 +878,32 @@ fun PlayerScreen(
                     }
                 }
             }
+            // Boxes around movement, drawn in the picture's place so they follow zoom and panning.
+            if (motionBoxes && swipeOffset == 0f) {
+                Canvas(Modifier.fillMaxSize()) {
+                    boxTick.longValue // read here so only this drawing is redone as boxes appear and fade
+                    val now = SystemClock.uptimeMillis()
+                    val boxes = detector.visible(now, 900L)
+                    if (boxes.isEmpty()) return@Canvas
+                    val fit = ZoomMath.fit(size.width, size.height, aspect, fill)
+                    val pad = 4.dp.toPx()
+                    withTransform({
+                        translate(panX, panY)
+                        scale(zoom, zoom, pivot = androidx.compose.ui.geometry.Offset.Zero)
+                    }) {
+                        for (b in boxes) {
+                            val age = (now - b.t) / 900f
+                            val alpha = if (age < 0.4f) 1f else (1f - (age - 0.4f) / 0.6f).coerceIn(0f, 1f)
+                            drawRect(
+                                Sl.Accent.copy(alpha = alpha),
+                                topLeft = androidx.compose.ui.geometry.Offset(fit[0] + b.x * fit[2] - pad / zoom, fit[1] + b.y * fit[3] - pad / zoom),
+                                size = androidx.compose.ui.geometry.Size(b.w * fit[2] + 2 * pad / zoom, b.h * fit[3] + 2 * pad / zoom),
+                                style = androidx.compose.ui.graphics.drawscope.Stroke(2.dp.toPx() / zoom),
+                            )
+                        }
+                    }
+                }
+            }
             // Small labels on the picture; they move down while the floating top bar is showing.
             val labelTop = if (overlay && controlsVisible) 52.dp else 0.dp
             Text(
@@ -1019,6 +1098,7 @@ fun PlayerScreen(
                 ) {
                     TextButton(onClick = onBack) { Text("Back") }
                     Text(camera.displayName, style = MaterialTheme.typography.titleMedium, maxLines = 1, modifier = Modifier.weight(1f).padding(horizontal = 8.dp))
+                    boxesButton()
                     soundButton()
                     fullScreenButton()
                     qualityButton()
@@ -1048,7 +1128,8 @@ fun PlayerScreen(
                     title = { Text(camera.displayName) },
                     navigationIcon = { TextButton(onClick = onBack) { Text("Back") } },
                     actions = {
-                        soundButton()
+                        boxesButton()
+                    soundButton()
                         fullScreenButton()
                         qualityButton()
                     },
