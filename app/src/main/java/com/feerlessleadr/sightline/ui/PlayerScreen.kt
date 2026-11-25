@@ -301,6 +301,22 @@ fun PlayerScreen(
         enterRecording(max(target.timeMs - 2000, alertClip.start), true)
     }
 
+    /** One frame back or forward (the frame length comes from the camera's frame rate): pauses, then shows that moment. */
+    fun stepFrame(direction: Int) {
+        if (live) {
+            if (direction > 0) return // nothing newer than live
+            // From live: pause on the frame shown, then step back from there.
+            val shown = frameUtc.get()
+            enterRecording(if (shown > 0) shown else TimelineMath.latestPlayable(now()), false)
+        } else if (playing) {
+            val shown = frameUtc.get()
+            if (shown > 0) pos = shown
+            playing = false
+        }
+        val target = TimelineMath.stepTarget(pos, direction, TimelineMath.frameIntervalMs(camera.fps), now()) ?: return
+        seek(target)
+    }
+
     fun togglePlay() {
         if (live) {
             val shown = frameUtc.get()
@@ -958,7 +974,8 @@ fun PlayerScreen(
             horizontalArrangement = Arrangement.SpaceBetween,
         ) {
             IconAction(Glyph.PrevAlert, "Previous alert") { jumpAlert(-1) }
-            Pill("−10 s") { seek((if (live) TimelineMath.latestPlayable(now()) else pos) - 10_000L) }
+            Pill("−10 s", compact = true) { seek((if (live) TimelineMath.latestPlayable(now()) else pos) - 10_000L) }
+            IconAction(Glyph.FrameBack, "Previous frame") { stepFrame(-1) }
             Box(
                 Modifier
                     .size(56.dp)
@@ -967,7 +984,8 @@ fun PlayerScreen(
                     .clickable(role = Role.Button, onClickLabel = if (live || playing) "Pause" else "Play") { togglePlay() },
                 contentAlignment = Alignment.Center,
             ) { GlyphIcon(if (live || playing) Glyph.Pause else Glyph.Play, Sl.Text, 28.dp) }
-            Pill("+10 s") { if (!live) seek(pos + 10_000L) }
+            IconAction(Glyph.FrameForward, "Next frame") { stepFrame(1) }
+            Pill("+10 s", compact = true) { if (!live) seek(pos + 10_000L) }
             IconAction(Glyph.NextAlert, "Next alert") { jumpAlert(1) }
         }
     }
@@ -1083,6 +1101,7 @@ internal fun Pill(
     modifier: Modifier = Modifier,
     selected: Boolean = false,
     accent: Color = Sl.Accent,
+    compact: Boolean = false,
     onClick: () -> Unit,
 ) {
     val shape = RoundedCornerShape(16.dp)
@@ -1092,7 +1111,7 @@ internal fun Pill(
             .border(1.dp, if (selected) accent else Sl.Line, shape)
             .background(if (selected) accent.copy(alpha = 0.14f) else Color.Transparent)
             .clickable(role = Role.Button, onClick = onClick)
-            .padding(horizontal = 12.dp, vertical = 7.dp),
+            .padding(horizontal = if (compact) 8.dp else 12.dp, vertical = 7.dp),
         contentAlignment = Alignment.Center,
     ) {
         Text(text, color = if (selected) accent else Sl.Muted, fontSize = 13.sp, fontWeight = FontWeight.SemiBold, maxLines = 1)

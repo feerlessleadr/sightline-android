@@ -60,6 +60,23 @@ class TimelineMathTest {
     }
 
     @Test
+    fun aFrameLastsAsLongAsTheCameraFrameRateSays() {
+        assertEquals(100L, TimelineMath.frameIntervalMs(null)) // unknown: 10 a second
+        assertEquals(100L, TimelineMath.frameIntervalMs(0.0))
+        assertEquals(200L, TimelineMath.frameIntervalMs(5.0))
+        assertEquals(33L, TimelineMath.frameIntervalMs(30.0))
+    }
+
+    @Test
+    fun steppingForwardNeverGoesIntoLive() {
+        val last = TimelineMath.latestPlayable(now)
+        assertEquals(last - 50, TimelineMath.stepTarget(last - 150, 1, 100, now))
+        assertNull(TimelineMath.stepTarget(last - 50, 1, 100, now))
+        assertEquals(last - 250, TimelineMath.stepTarget(last - 150, -1, 100, now))
+        assertEquals(last + 50, TimelineMath.stepTarget(last + 150, -1, 100, now)) // back is always allowed
+    }
+
+    @Test
     fun goToRefusesTimesThatAreNotRecordedYet() {
         assertNull(TimelineMath.goTo(now - 10_000, now, now))
         val w = TimelineMath.goTo(now - 3_600_000, now, now)!!

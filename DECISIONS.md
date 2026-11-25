@@ -307,3 +307,9 @@ Append-only, newest at the bottom. Never rewrite history; reverse a decision wit
 - **Finding**: `TextureView.getBitmap` returns the raw video stretched to the size asked for; the view's own `setTransform` (which fits the picture) is not applied to it.
 - **Decision**: ask for the snapshot at the picture's own proportions (the fitted rectangle, half size) and draw it in that rectangle (offset and size from `ZoomMath.fit`), then slide it.
 - **Impact**: `ui/PlayerScreen.kt` only.
+
+### 2026-11-25, M3: frame step
+- **Context**: web app steps one frame with the `,` and `.` keys (`stepFrame`); the feature list asks for on-screen buttons on a phone.
+- **Decision**: two buttons beside play/pause (previous frame, next frame). A frame is as long as one frame of the camera's reported rate (`FPS` from the camera list), 10 per second if unknown (the web's rule; `TimelineMath.frameIntervalMs`). Stepping pauses a playing recording on the frame shown, then moves one frame; from live only stepping back works (it pauses on the frame shown first); stepping forward stops at the newest playable moment (never into live; `TimelineMath.stepTarget`). The picture for the new moment is the paused still of that time (as when scrubbing). The -10 s and +10 s buttons were made a little narrower to make room.
+- **Not done**: holding a button to keep stepping.
+- **Impact**: `ui/PlayerScreen.kt`, `ui/Chrome.kt` (two glyphs), `data/Models.kt` (camera `fps`), `video/TimelineMath.kt` (tested).

@@ -1,5 +1,6 @@
 package com.feerlessleadr.sightline.data
 
+import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonArray
@@ -43,6 +44,8 @@ data class Camera(
     val isAlerting: Boolean = false,
     val isRecording: Boolean = false,
     val ptz: Boolean = false,
+    /** Frames per second Blue Iris reports for the camera (`FPS`); used for frame step. */
+    @SerialName("FPS") val fps: Double? = null,
     val webcast: Boolean? = null,
     val width: Int? = null,
     val height: Int? = null,

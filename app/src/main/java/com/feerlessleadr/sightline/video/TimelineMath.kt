@@ -5,6 +5,7 @@ import kotlin.math.max
 import kotlin.math.min
 import kotlin.math.pow
 import kotlin.math.roundToInt
+import kotlin.math.roundToLong
 
 /** The stretch of time the timeline bar shows, in milliseconds since 1970. */
 data class TimeWindow(val start: Long, val end: Long) {
@@ -30,6 +31,15 @@ object TimelineMath {
     )
 
     val SPEEDS = listOf(1, 2, 4, 8, 16)
+
+    /** How long one frame lasts, from the camera's frame rate; 10 frames a second if it is not known (as the web app does). */
+    fun frameIntervalMs(fps: Double?): Long = (1000.0 / (fps?.takeIf { it > 0 } ?: 10.0)).roundToLong().coerceAtLeast(1L)
+
+    /** Where a frame step from [position] lands, or null if it would go past the newest playable moment (no stepping into live). */
+    fun stepTarget(position: Long, direction: Int, intervalMs: Long, now: Long): Long? {
+        val target = position + direction * intervalMs
+        return if (direction > 0 && target > latestPlayable(now)) null else target
+    }
 
     /** The newest moment that can be played back from the timeline. */
     fun latestPlayable(now: Long) = now - KEEP_OUT_MS

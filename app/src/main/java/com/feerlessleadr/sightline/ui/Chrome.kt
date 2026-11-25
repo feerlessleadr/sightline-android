@@ -53,7 +53,7 @@ fun SlLogo(size: Dp = 28.dp) {
     }
 }
 
-enum class Glyph { Refresh, FullScreen, ExitFullScreen, Menu, Live, Alerts, Play, Pause, PrevAlert, NextAlert, Calendar, Sound, Muted }
+enum class Glyph { Refresh, FullScreen, ExitFullScreen, Menu, Live, Alerts, Play, Pause, PrevAlert, NextAlert, Calendar, Sound, Muted, FrameBack, FrameForward }
 
 /** Small line icons drawn by hand, so the app needs no icon library. */
 @Composable
@@ -91,6 +91,14 @@ fun GlyphIcon(glyph: Glyph, color: Color, size: Dp = 22.dp) {
                     drawLine(color, Offset(s * 0.64f, s * 0.38f), Offset(s * 0.88f, s * 0.62f), strokeWidth = w, cap = StrokeCap.Round)
                     drawLine(color, Offset(s * 0.88f, s * 0.38f), Offset(s * 0.64f, s * 0.62f), strokeWidth = w, cap = StrokeCap.Round)
                 }
+            }
+            Glyph.FrameBack -> {
+                drawPath(Path().apply { moveTo(s * 0.62f, s * 0.22f); lineTo(s * 0.32f, s * 0.5f); lineTo(s * 0.62f, s * 0.78f) }, color, style = st)
+                drawLine(color, Offset(s * 0.80f, s * 0.24f), Offset(s * 0.80f, s * 0.76f), strokeWidth = w, cap = StrokeCap.Round)
+            }
+            Glyph.FrameForward -> {
+                drawPath(Path().apply { moveTo(s * 0.38f, s * 0.22f); lineTo(s * 0.68f, s * 0.5f); lineTo(s * 0.38f, s * 0.78f) }, color, style = st)
+                drawLine(color, Offset(s * 0.20f, s * 0.24f), Offset(s * 0.20f, s * 0.76f), strokeWidth = w, cap = StrokeCap.Round)
             }
             Glyph.Calendar -> {
                 drawRoundRect(color, Offset(s * 0.16f, s * 0.22f), Size(s * 0.68f, s * 0.62f), CornerRadius(s * 0.08f), style = st)
