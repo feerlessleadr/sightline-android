@@ -284,3 +284,26 @@ Append-only, newest at the bottom. Never rewrite history; reverse a decision wit
 - **Cause**: panning was only allowed after a pinch zoom (zoom above 1), not in fill mode; and Compose's tap detector counts any press lifted inside the picture as a tap, even after a drag.
 - **Decision**: one gesture handler for tap, double tap, pan and pinch (the earlier two handlers are gone). A press is a tap only if it never leaves the touch slop, never used two fingers and ends within 0.4 s; a second tap within 0.3 s makes it a double tap, otherwise the single tap fires after 0.3 s. One finger pans when zoomed in or in fill mode (`ZoomMath.clampAxis` keeps the picture covering the stage); pinching out in fill mode does not drop back below the fill.
 - **Impact**: `ui/PlayerScreen.kt` only.
+
+### 2026-11-25, M3: swipe between cameras in the player
+- **Context**: next item. Rules read from the web source (`switchCam`, `changeCam`, the swipe test in the picture's pointer-up handler).
+- **Decision**: a quick sideways swipe on the picture (more than 60 dp across, clearly more sideways than up or down, under 0.6 s) switches to the next camera (swipe left) or the previous one (swipe right), wrapping round, but only when the picture is neither zoomed nor filling the screen (a drag then pans it). The cameras are the ones shown in the grid's group in the grid's order, including any order the owner made, or all shown cameras if the current one is not among them (`playerCameras`, tested). Switching keeps the moment: live stays live, a recording keeps its time, play state and speed; zoom, the alert file, timeline and alerts belong to the camera and start fresh. The web app's previous and next buttons only appear for a mouse (hidden on touch screens), so there are none.
+- **Impact**: `ui/PlayerScreen.kt` (gesture, new `cameras` and `onSwitchCamera` parameters), `ui/AppViewModel.kt` (`playerCameras`), `MainActivity.kt`.
+
+### 2026-11-25, Smoother camera swipe: the picture follows the finger and the next camera slides in
+- **Context**: owner asked for a smoother, more professional swipe transition.
+- **Decision**: a clearly sideways drag (decided at the first real movement) now moves the current picture with the finger and slides the neighbouring camera's picture in from that side. On release, a drag past 40% of the width, or a quick one of at least 60 dp, slides the rest of the way (180 ms), then switches camera with the new picture already on screen until its video starts; anything shorter springs back (160 ms). A second finger joining cancels the swipe. Swipes are ignored while one is settling.
+- **Limit**: the sliding neighbour is a still frame (640 px wide) of that camera: live ones are fetched a moment after a camera opens and refreshed when a swipe starts; for a recording, the neighbour's frame at the same time is fetched when the swipe starts and may take a moment to arrive (until then the neighbour shows as a dark panel with its name). The new camera's live video cannot be shown moving because its stream only starts once chosen.
+- **Impact**: `ui/PlayerScreen.kt` only (the still is no longer reset by the camera, so the swipe can pass one on).
+
+### 2026-11-25, Camera swipe: both pictures are stills while sliding
+- **Context**: owner saw the leaving picture (still live) jerk while the incoming still was smooth. Moving a live video view re-layers it on every frame; a still drawn by Compose moves smoothly.
+- **Decision**: when a swipe locks on, a snapshot of the current frame (`TextureView.getBitmap`, half the stage size, taken before anything moves) is shown in its place and the live video view is hidden (alpha 0, the decoder keeps running). The snapshot slides with the finger and out; the neighbour is a still as before. If the swipe springs back the snapshot is dropped and the live video, still running, is shown again at the same place; if it completes, the new camera's still is up before the switch. Only done when the video view is what is on screen (not when a still already covers it).
+- **Unverified**: that `getBitmap` returns the picture with its fit transform (not stretched over the whole view); if the snapshot looks stretched, the fix is to draw it through the same fit rectangle.
+- **Impact**: `ui/PlayerScreen.kt` only.
+
+### 2026-11-25, Swipe snapshot was stretched: `getBitmap` ignores the fit transform
+- **Context**: the owner's screenshot showed the leaving snapshot stretched over the whole video area. This was the open question in the entry above.
+- **Finding**: `TextureView.getBitmap` returns the raw video stretched to the size asked for; the view's own `setTransform` (which fits the picture) is not applied to it.
+- **Decision**: ask for the snapshot at the picture's own proportions (the fitted rectangle, half size) and draw it in that rectangle (offset and size from `ZoomMath.fit`), then slide it.
+- **Impact**: `ui/PlayerScreen.kt` only.

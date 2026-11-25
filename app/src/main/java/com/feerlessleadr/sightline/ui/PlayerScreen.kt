@@ -6,6 +6,7 @@ import android.content.res.Configuration
 import android.graphics.Matrix
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.core.animate
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
@@ -15,6 +16,7 @@ import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.platform.LocalConfiguration
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.geometry.isSpecified
 import android.graphics.SurfaceTexture
 import androidx.compose.ui.layout.onSizeChanged
@@ -46,6 +48,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
@@ -90,6 +93,7 @@ import androidx.compose.ui.platform.LocalResources
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
@@ -114,6 +118,7 @@ import java.time.ZoneOffset
 import java.util.Calendar
 import java.util.Locale
 import java.util.concurrent.atomic.AtomicLong
+import kotlin.math.abs
 import kotlin.math.max
 import kotlin.math.min
 import kotlinx.coroutines.CancellationException
@@ -151,6 +156,8 @@ fun PlayerScreen(
     camera: Camera,
     quality: VideoQuality,
     api: PlayerApi,
+    cameras: List<Camera>,
+    onSwitchCamera: (Camera) -> Unit,
     soundOn: Boolean,
     volume: Float,
     onSound: (on: Boolean, volume: Float) -> Unit,
@@ -165,7 +172,7 @@ fun PlayerScreen(
     var stats by remember { mutableStateOf("") }
     var attempt by remember { mutableIntStateOf(0) }
     var aspect by remember(id) { mutableStateOf((camera.width ?: 16).toFloat() / (camera.height ?: 9).toFloat()) }
-    var still by remember(id) { mutableStateOf<ImageBitmap?>(null) }
+    var still by remember { mutableStateOf<ImageBitmap?>(null) }
     var streaming by remember { mutableStateOf(false) }
     var pickQuality by remember { mutableStateOf(false) }
     var showGoTo by remember { mutableStateOf(false) }
@@ -497,6 +504,74 @@ fun PlayerScreen(
             else -> togglePlay()
         }
     }
+    // Swiping to another camera: the picture follows the finger and the next camera's picture slides in beside it. The new
+    // camera's picture is a still frame (its video starts only once it is chosen); the video takes over from it.
+    val density = LocalDensity.current
+    val swipeMinPx = with(density) { 60.dp.toPx() }
+    var swipeOffset by remember { mutableFloatStateOf(0f) }
+    var swipeBusy by remember { mutableStateOf(false) }
+    var neighbourStills by remember { mutableStateOf<Map<String, ImageBitmap>>(emptyMap()) }
+    // A snapshot of the picture that is leaving, slid instead of the live video view (a live video view jerks when moved).
+    var outgoingStill by remember { mutableStateOf<ImageBitmap?>(null) }
+    val textureHolder = remember { arrayOfNulls<TextureView>(1) }
+    val captureOutgoing by rememberUpdatedState<() -> Unit> {
+        val tv = textureHolder[0]
+        // Only when the video view is what is on screen (not when a still already covers it).
+        if (tv != null && tv.isAvailable && stageW > 0f && stageH > 0f && (streaming || still == null)) {
+            // The snapshot is the raw video stretched to the size asked for (the view's fit transform is not applied), so ask
+            // for the picture's own proportions and draw it in the picture's place.
+            val fit = ZoomMath.fit(stageW, stageH, aspect, false)
+            val bitmap = runCatching { tv.getBitmap((fit[2] / 2).toInt().coerceAtLeast(1), (fit[3] / 2).toInt().coerceAtLeast(1)) }.getOrNull()
+            outgoingStill = bitmap?.asImageBitmap()
+        }
+    }
+    val cameraIndex = cameras.indexOfFirst { it.optionValue == id }.coerceAtLeast(0)
+    fun neighbour(direction: Int): Camera? =
+        if (cameras.size < 2) null else cameras[(cameraIndex + direction + cameras.size) % cameras.size]
+
+    suspend fun loadNeighbour(other: Camera) {
+        val bytes = try {
+            if (live) api.liveStill(other.optionValue, 640) else api.recordedStill(other.optionValue, pos, 640)
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: BlueIrisException) {
+            null
+        } ?: return
+        val bitmap = withContext(Dispatchers.Default) { BitmapFactory.decodeByteArray(bytes, 0, bytes.size)?.asImageBitmap() } ?: return
+        val keep = setOfNotNull(neighbour(1)?.optionValue, neighbour(-1)?.optionValue, id)
+        neighbourStills = (neighbourStills + (other.optionValue to bitmap)).filterKeys { it in keep }
+    }
+    // Live stills of both neighbours are fetched a moment after a camera opens so a swipe has something to show at once.
+    LaunchedEffect(id, live, cameras.size) {
+        if (!live) return@LaunchedEffect
+        delay(1_200)
+        listOfNotNull(neighbour(1), neighbour(-1)).forEach { loadNeighbour(it) }
+    }
+    val onSwipeStart by rememberUpdatedState<suspend () -> Unit> {
+        coroutineScope { listOfNotNull(neighbour(1), neighbour(-1)).forEach { launch { loadNeighbour(it) } } }
+    }
+    // Let go of a swipe: a long or quick one slides the rest of the way and switches camera (keeping the moment: live
+    // stays live, a recording keeps its time); a short one springs back.
+    val finishSwipe by rememberUpdatedState<suspend (Float, Boolean) -> Unit> { dx, quick ->
+        val w = stageW
+        val target = neighbour(if (dx < 0) 1 else -1)
+        val complete = target != null && w > 0f && (abs(dx) > w * 0.4f || (quick && abs(dx) > swipeMinPx))
+        swipeBusy = true
+        if (!complete || target == null) {
+            animate(swipeOffset, 0f, animationSpec = tween(160)) { v, _ -> swipeOffset = v }
+            outgoingStill = null // the live video is still running underneath and is shown again
+        } else {
+            animate(swipeOffset, if (dx < 0) -w else w, animationSpec = tween(180)) { v, _ -> swipeOffset = v }
+            // The new camera's picture is fully in place: switch to it, keeping that picture up until its video starts.
+            still = neighbourStills[target.optionValue] ?: ImageBitmap(1, 1)
+            streaming = false
+            outgoingStill = null
+            swipeOffset = 0f
+            lastTouch = SystemClock.elapsedRealtime()
+            onSwitchCamera(target)
+        }
+        swipeBusy = false
+    }
     val onStageDoubleTap by rememberUpdatedState<() -> Unit> {
         lastTouch = SystemClock.elapsedRealtime()
         if (zoom > 1f) {
@@ -562,6 +637,11 @@ fun PlayerScreen(
                             var moved = false
                             var multi = false
                             var endedAt = down.uptimeMillis
+                            var lastPos = down.position
+                            // Sideways swiping to another camera needs a picture that is neither zoomed nor filled.
+                            val canSwipe = zoom <= 1f && !fill && cameras.size >= 2 && !swipeBusy
+                            var swipeDecided = false
+                            var swipeLocked = false
                             do {
                                 val event = awaitPointerEvent()
                                 val fingers = event.changes.count { it.pressed }
@@ -569,6 +649,24 @@ fun PlayerScreen(
                                 if (fingers >= 2) multi = true
                                 val mine = event.changes.firstOrNull { it.id == down.id }
                                 if (mine != null && (mine.position - down.position).getDistance() > slop) moved = true
+                                if (mine != null) lastPos = mine.position
+                                if (canSwipe && !multi && fingers == 1 && mine != null && moved) {
+                                    val sx = mine.position.x - down.position.x
+                                    val sy = mine.position.y - down.position.y
+                                    if (!swipeDecided) {
+                                        // The first real movement decides: clearly sideways follows the finger, anything else does not.
+                                        swipeDecided = true
+                                        swipeLocked = abs(sx) > abs(sy) * 1.5f
+                                        if (swipeLocked) {
+                                            captureOutgoing() // before anything moves
+                                            launch { onSwipeStart() }
+                                        }
+                                    }
+                                    if (swipeLocked) {
+                                        swipeOffset = sx
+                                        mine.consume()
+                                    }
+                                }
                                 // The last event of a gesture has no finger down, so there is no centre to work with (it
                                 // comes back as "not a number", which blanked the picture the moment you let go).
                                 val centre = if (fingers > 0) event.calculateCentroid() else androidx.compose.ui.geometry.Offset.Unspecified
@@ -591,6 +689,11 @@ fun PlayerScreen(
                                     event.changes.forEach { if (it.positionChanged()) it.consume() }
                                 }
                             } while (event.changes.any { it.pressed })
+                            if (swipeLocked) {
+                                val dx = if (multi) 0f else lastPos.x - down.position.x
+                                val quick = endedAt - down.uptimeMillis < 600L
+                                launch { finishSwipe(dx, quick) }
+                            }
                             if (!moved && !multi && endedAt - down.uptimeMillis < 400L) {
                                 if (pendingTap != null && endedAt - lastTapAt < 300L) {
                                     pendingTap?.cancel()
@@ -632,6 +735,7 @@ fun PlayerScreen(
                             override fun onSurfaceTextureUpdated(st: SurfaceTexture) = Unit
                         }
                         if (tv.isAvailable) surface = Surface(tv.surfaceTexture!!)
+                        textureHolder[0] = tv
                     }
                 },
                 update = { tv ->
@@ -645,21 +749,64 @@ fun PlayerScreen(
                         m.postTranslate(panX, panY)
                         tv.setTransform(m)
                     }
+                    tv.alpha = if (outgoingStill != null) 0f else 1f // hidden (not stopped) while its snapshot slides
                 },
             )
             // Covers the video only while no video frame is showing (a paused recording, or the start of a stream).
             if (!streaming) {
                 still?.let {
+                    Box(Modifier.fillMaxSize().background(Color.Black)) // hides the picture that was there before
                     Image(
                         it, contentDescription = null, contentScale = if (fill) ContentScale.Crop else ContentScale.Fit,
                         modifier = Modifier.fillMaxSize().graphicsLayer {
                             scaleX = zoom
                             scaleY = zoom
-                            translationX = panX
+                            translationX = panX + swipeOffset
                             translationY = panY
                             transformOrigin = TransformOrigin(0f, 0f)
                         },
                     )
+                }
+            }
+            // The leaving picture while swiping: a snapshot, which slides smoothly.
+            outgoingStill?.let {
+                val rect = ZoomMath.fit(stageW, stageH, aspect, false)
+                Image(
+                    it, contentDescription = null, contentScale = ContentScale.FillBounds,
+                    modifier = Modifier
+                        .offset { IntOffset(rect[0].roundToInt(), rect[1].roundToInt()) }
+                        .size(with(density) { rect[2].toDp() }, with(density) { rect[3].toDp() })
+                        .graphicsLayer { translationX = swipeOffset },
+                )
+            }
+            // While swiping, the next (or previous) camera's picture comes in from the side, close behind the current one.
+            if (swipeOffset != 0f) {
+                val other = neighbour(if (swipeOffset < 0f) 1 else -1)
+                if (other != null) {
+                    Box(
+                        Modifier
+                            .fillMaxSize()
+                            .graphicsLayer { translationX = swipeOffset + (if (swipeOffset < 0f) stageW else -stageW) }
+                            .background(Color.Black),
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        val picture = neighbourStills[other.optionValue]
+                        if (picture != null) {
+                            Image(picture, contentDescription = null, contentScale = if (fill) ContentScale.Crop else ContentScale.Fit, modifier = Modifier.fillMaxSize())
+                        }
+                        Text(
+                            other.displayName,
+                            color = Color.White,
+                            fontSize = 12.sp,
+                            fontWeight = FontWeight.SemiBold,
+                            modifier = Modifier
+                                .align(if (picture != null) Alignment.TopStart else Alignment.Center)
+                                .padding(8.dp)
+                                .clip(RoundedCornerShape(12.dp))
+                                .background(Color(0x99000000))
+                                .padding(horizontal = 10.dp, vertical = 5.dp),
+                        )
+                    }
                 }
             }
             // Small labels on the picture; they move down while the floating top bar is showing.

@@ -7,6 +7,7 @@ import androidx.lifecycle.viewModelScope
 import com.feerlessleadr.sightline.data.AddressResult
 import com.feerlessleadr.sightline.data.BlueIrisClient
 import com.feerlessleadr.sightline.data.BlueIrisException
+import com.feerlessleadr.sightline.data.Camera
 import com.feerlessleadr.sightline.data.CameraList
 import com.feerlessleadr.sightline.data.CredentialStore
 import com.feerlessleadr.sightline.data.LockAfter
@@ -722,4 +723,16 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         const val KEY_LOCK_AFTER = "lock_after"
         const val KEY_LAST_STOP = "last_stop_millis"
     }
+}
+
+/**
+ * The cameras to swipe through while watching [current]: the ones shown in the grid's group, in the grid's order
+ * (including any order the owner made), or every shown camera if [current] is not among them (as the web app does).
+ */
+fun SessionState.playerCameras(current: String): List<Camera> {
+    val list = cameras ?: return emptyList()
+    val group = list.groups.firstOrNull { it.optionValue == selectedGroup } ?: list.groups.firstOrNull { it.optionValue == "index" }
+    val key = group?.optionValue ?: "index"
+    val shown = (arrangements[key] ?: GroupArrangement()).sorted(list.visibleCameras(group)) { it.optionValue }
+    return if (shown.any { it.optionValue == current }) shown else list.visibleCameras(null)
 }

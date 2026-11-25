@@ -23,6 +23,7 @@ import com.feerlessleadr.sightline.ui.SettingsScreen
 import com.feerlessleadr.sightline.ui.AppViewModel
 import com.feerlessleadr.sightline.ui.CameraListScreen
 import com.feerlessleadr.sightline.ui.PlayerScreen
+import com.feerlessleadr.sightline.ui.playerCameras
 import com.feerlessleadr.sightline.ui.LockScreen
 import com.feerlessleadr.sightline.ui.LoginScreen
 import com.feerlessleadr.sightline.ui.SightlineTheme
@@ -88,6 +89,8 @@ class MainActivity : FragmentActivity() {
                         camera = live,
                         quality = session.quality,
                         api = viewModel.playerApi,
+                        cameras = session.playerCameras(live.optionValue),
+                        onSwitchCamera = { liveCamera = it.optionValue },
                         soundOn = session.soundOn,
                         volume = session.volume,
                         onSound = viewModel::setSound,

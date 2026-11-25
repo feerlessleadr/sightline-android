@@ -59,7 +59,7 @@ Status: **Done**, **Partial**, **Planned (Mn)**, **N/A** (with the reason). "And
 | Go to date and time: quick choices (Last hour, This morning, Last night, Yesterday, This time yesterday, This time last week) and a calendar with from/to times; days with no recordings greyed, days with alerts dotted | Done (M3: quick choices, month calendar with recorded days, alert dots, from/to times) |
 | Previous / next alert, +-10 s, play/pause, speed, one-tap LIVE | Done (M3 stage 1) |
 | Frame step back/forward | Planned (M3, on-screen buttons; the web uses `,` `.`) |
-| Swipe between cameras (and prev/next buttons) | Planned (M3) |
+| Swipe between cameras (and prev/next buttons) | Done: swipe sideways (M3); the web buttons are mouse-only, so none |
 | Watch all cameras at once (group view), live and in recordings, names on pictures, tap a camera to jump to it at that moment, press again to return; hidden/disabled cameras left out; layout rules for recordings | Planned (M3) |
 | Tap video: pause/resume a recording, close a live camera back to the grid; double tap fit/fill; floating controls that fade; full screen | Done: tap pauses/resumes or closes live, double tap fit/fill, floating controls that fade, full screen (M3) |
 | Digital zoom to 8x, pinch and pan, sharper stream while zoomed (Auto quality) | Done (pinch, pan, double tap or badge to reset; sharper stream in Auto) |
