@@ -18,12 +18,14 @@ class FrameClockTest {
         val head = ByteArray(18)
         for (i in 0 until 4) head[6 + i] = ((utc and 0xFFFFFFFFL) shr (8 * i)).toByte()
         for (i in 0 until 4) head[10 + i] = ((utc shr 32) shr (8 * i)).toByte()
+        head[2] = 1; head[3] = 2; head[4] = 3; head[5] = 4
         head[14] = 0; head[15] = 0; head[16] = 0; head[17] = 3 // payload length 3, big-endian
         b.write(head).write(byteArrayOf(1, 2, 3))
         val reader = BlueStreamReader(b)
         reader.readHeader()
         val video = reader.next() as StreamBlock.Video
         assertEquals(utc, video.utcMillis)
+        assertEquals(0x01020304L, video.rawMillis)
         assertEquals(3, video.data.size)
     }
 }

@@ -310,4 +310,19 @@ class BlueIrisClientTest {
         assertEquals(listOf(1_800_000_000_000L, 1_800_000_100_000L), alerts.map { it.timeMs })
         assertEquals("person:90%", alerts[1].memo)
     }
+
+    @Test fun `an alert file is opened by name with an offset and speed, cookie only`() = runBlocking {
+        signedInClient()
+        server.enqueue(MockResponse().addHeader("Content-Type", "video/mpeg").setBody("blue"))
+        client.openClip("@100.bvr", 2500L, 200).use { }
+        val request = server.takeRequest()
+        assertTrue(request.path!!.startsWith("/file/clips/@100.bvr?audio=0&stream=0&speed=200&time=2500&extend=2"))
+        assertEquals("session=sess1", request.getHeader("Cookie"))
+    }
+
+    @Test fun `alert details include the size text`() = runBlocking {
+        signedInClient()
+        reply("""{"result":"success","data":[{"camera":"Cam1","date":1800000100,"memo":"","flags":0,"path":"@1.bvr","clip":"@2.bvr","offset":500,"filesize":"20 sec (391KB)"}]}""")
+        assertEquals("20 sec (391KB)", client.cameraAlerts("Cam1", 0L, 2_000_000_000_000L)[0].fileSize)
+    }
 }

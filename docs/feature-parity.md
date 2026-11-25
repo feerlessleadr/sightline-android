@@ -54,9 +54,9 @@ Status: **Done**, **Partial**, **Planned (Mn)**, **N/A** (with the reason). "And
 | Web feature | Status |
 |---|---|
 | Live video of one camera with audio, and volume slider / mute | Partial: video first version done (black screen being fixed); audio and volume M3 |
-| Recorded video from `/time/` and `/file/clips/`, speed up to 16x | Partial: `/time/` and speeds 1-16x done (M3 stage 1); `/file/clips/` later |
+| Recorded video from `/time/` and `/file/clips/`, speed up to 16x | Done: `/time/` and speeds 1-16x; alerts play from their `/file/clips/` file (M3) |
 | Scrubbable timeline with colour-coded alert marks, zoom 30 s to 7 d (pinch), buttons 2m 15m 1h 6h 24h 48h, midnight day labels, "now" stays at the right edge live | Done (M3 stage 1; pinch zoom, buttons, day labels, now at the right edge) |
-| Go to date and time: quick choices (Last hour, This morning, Last night, Yesterday, This time yesterday, This time last week) and a calendar with from/to times; days with no recordings greyed, days with alerts dotted | Partial: quick choices, plus a day and start time (M3 stage 1); calendar with recorded days greyed and alert dots later |
+| Go to date and time: quick choices (Last hour, This morning, Last night, Yesterday, This time yesterday, This time last week) and a calendar with from/to times; days with no recordings greyed, days with alerts dotted | Done (M3: quick choices, month calendar with recorded days, alert dots, from/to times) |
 | Previous / next alert, +-10 s, play/pause, speed, one-tap LIVE | Done (M3 stage 1) |
 | Frame step back/forward | Planned (M3, on-screen buttons; the web uses `,` `.`) |
 | Swipe between cameras (and prev/next buttons) | Planned (M3) |
@@ -67,7 +67,7 @@ Status: **Done**, **Partial**, **Planned (Mn)**, **N/A** (with the reason). "And
 | PTZ pad (8 directions, zoom), Home (or preset named Home), preset list, stop on release/leave/30 s/slide-off, retry 30 s; only for PTZ cameras with permission | Planned (M3) |
 | Motion boxes in the player with sensitivity | Planned (M3) |
 | Rewind without Blue Iris's timeline (older 5.x): clip-list fallback, "Rewinding needs a newer Blue Iris" | Planned (M3) |
-| Alerts play from their recording file, carry on from the timeline outside it | Planned (M3) |
+| Alerts play from their recording file, carry on from the timeline outside it | Done (M3; falls back to the timeline if the file cannot be opened) |
 | Restart at new size if a recording changes picture size | Planned (M3) |
 | Keeps the screen awake while the player is open (wake lock, found in the source only) | Done (M3 stage 1) |
 | Short haptic buzz on long-press actions (found in the source only) | Done (M2 round 2) |

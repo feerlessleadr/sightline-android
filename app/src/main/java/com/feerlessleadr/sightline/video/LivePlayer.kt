@@ -52,6 +52,11 @@ suspend fun playLive(
      * their recording times give, divided by this speed, instead of as soon as they arrive. Null = as they arrive (live).
      */
     speed: Float? = null,
+    /**
+     * For a recording file (not the timeline): the recording time of the point it was opened at. Files may carry no
+     * date, so frame times are then this plus the time since the first frame.
+     */
+    clipBaseMs: Long? = null,
 ) {
     withContext(Dispatchers.IO) {
         // Cancelling the coroutine closes the connection, which unblocks the read below.
@@ -84,6 +89,7 @@ suspend fun playLive(
             var queued = 0L
             var gotKey = false
             var firstUtc = -1L
+            var firstRaw = -1L
             var baseNs = System.nanoTime()
             var lastReport = SystemClock.elapsedRealtime()
             while (true) {
@@ -98,10 +104,15 @@ suspend fun playLive(
                             // Wait for the first key frame; earlier frames cannot be decoded.
                         } else {
                             gotKey = true
-                            if (speed != null && block.utcMillis > 0) {
+                            var t = block.utcMillis
+                            if (t < 1_000_000_000_000L && clipBaseMs != null) {
+                                if (firstRaw < 0) firstRaw = block.rawMillis
+                                t = clipBaseMs + (block.rawMillis - firstRaw)
+                            }
+                            if (speed != null && t > 0) {
                                 // Play at the recorded pace: hold this frame until its time, so the decoder never piles up.
-                                if (firstUtc < 0) firstUtc = block.utcMillis
-                                val rel = block.utcMillis - firstUtc
+                                if (firstUtc < 0) firstUtc = t
+                                val rel = t - firstUtc
                                 var due = baseNs + (rel * 1_000_000L / speed).toLong()
                                 val nowNs = System.nanoTime()
                                 if (due > nowNs + 2_000_000_000L || due < nowNs - 500_000_000L) {
@@ -112,7 +123,7 @@ suspend fun playLive(
                                 val waitMs = (due - nowNs) / 1_000_000L - 15
                                 if (waitMs > 0) delay(waitMs)
                             }
-                            if (block.utcMillis > 0) onFrameTime(block.utcMillis)
+                            if (t > 0) onFrameTime(t)
                             val index = decoder.dequeueInputBuffer(INPUT_WAIT_US)
                             // If the decoder is behind, drop this frame rather than building up delay.
                             if (index >= 0) {

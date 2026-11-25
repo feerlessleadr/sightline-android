@@ -8,7 +8,7 @@ data class StreamHeader(val width: Int, val height: Int, val isHevc: Boolean)
 sealed interface StreamBlock {
     /** One encoded access unit (Annex-B H.264 or H.265). */
     /** [utcMillis] is when the frame was recorded (or captured, for live video), in milliseconds since 1970; 0 if unknown. */
-    class Video(val data: ByteArray, val utcMillis: Long = 0L) : StreamBlock
+    class Video(val data: ByteArray, val utcMillis: Long = 0L, val rawMillis: Long = 0L) : StreamBlock
 
     data object Audio : StreamBlock
     data object Status : StreamBlock
@@ -70,7 +70,9 @@ class BlueStreamReader(private val source: BufferedSource) {
         }
         // Bytes 6..13 hold the frame's clock time, little-endian: a 32-bit low part and a 21-bit high part (checked on a real capture).
         val utc = (littleEndianInt(head, 6).toLong() and 0xFFFFFFFFL) + ((littleEndianInt(head, 10).toLong() and 0x1FFFFFL) shl 32)
-        return StreamBlock.Video(source.readByteArray(length.toLong()), utc)
+        // Bytes 2..5 are a millisecond counter (big-endian): for clip files, which may carry no date, time within the file.
+        val raw = bigEndianInt(head, 2).toLong() and 0xFFFFFFFFL
+        return StreamBlock.Video(source.readByteArray(length.toLong()), utc, raw)
     }
 
     private fun bigEndianInt(b: ByteArray, at: Int) =

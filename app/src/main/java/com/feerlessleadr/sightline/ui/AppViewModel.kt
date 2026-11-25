@@ -421,6 +421,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         openLive = { camera, size -> guarded { it.openVideo(camera, size) } },
         openRecorded = { camera, pos, speed, size -> guarded { it.openRecorded(camera, pos, speed, size) } },
         liveStill = { camera, width -> fetchStill(camera, width) },
+        openClip = { file, offset, speed, size -> guarded { it.openClip(file, offset, speed, size) } },
         recordedStill = { camera, pos, width -> guarded { it.recordedStill(camera, pos, width) } },
         timeline = { camera, start, end, step -> guarded { it.timeline(camera, start, end, step) } },
         alerts = { camera, start, end -> guarded { it.cameraAlerts(camera, start, end) } },

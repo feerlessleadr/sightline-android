@@ -6,6 +6,7 @@ import android.graphics.Matrix
 import androidx.compose.ui.geometry.isSpecified
 import android.graphics.SurfaceTexture
 import androidx.compose.ui.layout.onSizeChanged
+import com.feerlessleadr.sightline.video.CalendarMath
 import com.feerlessleadr.sightline.video.ZoomMath
 import android.view.Surface
 import android.view.TextureView
@@ -75,7 +76,9 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
+import com.feerlessleadr.sightline.data.AlertClips
 import com.feerlessleadr.sightline.data.AlertItem
+import com.feerlessleadr.sightline.data.SessionExpiredException
 import com.feerlessleadr.sightline.data.BlueIrisException
 import com.feerlessleadr.sightline.data.Camera
 import com.feerlessleadr.sightline.data.Timeline
@@ -106,6 +109,7 @@ import kotlinx.coroutines.withContext
 class PlayerApi(
     val openLive: suspend (camera: String, size: StreamRequest?) -> VideoStream,
     val openRecorded: suspend (camera: String, positionMs: Long, speedPercent: Int, size: StreamRequest?) -> VideoStream,
+    val openClip: suspend (file: String, offsetMs: Long, speedPercent: Int, size: StreamRequest?) -> VideoStream,
     val liveStill: suspend (camera: String, width: Int) -> ByteArray?,
     val recordedStill: suspend (camera: String, positionMs: Long, width: Int) -> ByteArray,
     val timeline: suspend (camera: String, startMs: Long, endMs: Long, msecPerStep: Long) -> Timeline,
@@ -113,6 +117,9 @@ class PlayerApi(
 )
 
 private const val DAY_MS = 86_400_000L
+
+/** The recording file of an alert being watched: when it starts and ends, whether it already ended or could not be opened. */
+private data class AlertClip(val file: String, val start: Long, val end: Long, val endedAt: Long = 0L, val broken: Boolean = false)
 
 /**
  * One camera, live or from its recordings. The picture comes from a stream that restarts whenever the position,
@@ -155,6 +162,9 @@ fun PlayerScreen(
     var timelineNote by remember(id) { mutableStateOf<String?>(null) }
     var alerts by remember(id) { mutableStateOf<List<AlertItem>>(emptyList()) }
     val frameUtc = remember { AtomicLong(0L) }
+    var clip by remember(id) { mutableStateOf<AlertClip?>(null) }
+    // What the calendar learned about each month for this camera, kept while the player is open.
+    val monthCache = remember(id) { HashMap<java.time.YearMonth, com.feerlessleadr.sightline.video.MonthInfo>() }
 
     // Digital zoom (pinch the picture, drag to pan, double tap to reset). In Auto quality a zoomed picture asks Blue
     // Iris for a sharper stream once the zoom has settled, like the web app.
@@ -182,6 +192,14 @@ fun PlayerScreen(
     }
 
     fun now() = System.currentTimeMillis()
+
+    /** The alert recording file to play from at [position], or null (use the timeline). */
+    fun clipFor(position: Long): AlertClip? {
+        val c = clip ?: return null
+        if (c.broken || !AlertClips.isPlayableFile(c.file) || position < c.start || position >= c.end) return null
+        if (c.endedAt > 0 && position >= c.endedAt - 1000) return null
+        return c
+    }
 
     fun goLive() {
         live = true
@@ -236,7 +254,10 @@ fun PlayerScreen(
             return
         }
         if (window.length > 900_000L) window = TimeWindow(window.end - 120_000L, window.end)
-        enterRecording(target.timeMs - 2000, true)
+        val file = AlertClips.fileFor(target.clip, target.path)
+        val alertClip = AlertClip(file, target.timeMs - target.offsetMs, target.timeMs + AlertClips.durationMillis(target.fileSize))
+        clip = alertClip
+        enterRecording(max(target.timeMs - 2000, alertClip.start), true)
     }
 
     fun togglePlay() {
@@ -265,10 +286,25 @@ fun PlayerScreen(
         val startAt = pos
         val atSpeed = speed
         val isLive = live
+        var fromFile = false
         try {
             val size = streamSize
             val started = SystemClock.elapsedRealtime()
-            val stream = if (isLive) api.openLive(id, size) else api.openRecorded(id, startAt, atSpeed * 100, size)
+            // Inside an alert, play from the alert's own recording file (as the web app does: on some cameras the
+            // timeline shows an alert cropped to a corner); anywhere else, or if the file cannot be had, the timeline.
+            val fileClip = if (isLive) null else clipFor(startAt)
+            val stream = when {
+                isLive -> api.openLive(id, size)
+                fileClip != null -> try {
+                    api.openClip(fileClip.file, startAt - fileClip.start, atSpeed * 100, size).also { fromFile = true }
+                } catch (e: SessionExpiredException) {
+                    throw e
+                } catch (e: BlueIrisException) {
+                    clip = fileClip.copy(broken = true) // do not try this file again
+                    api.openRecorded(id, startAt, atSpeed * 100, size)
+                }
+                else -> api.openRecorded(id, startAt, atSpeed * 100, size)
+            }
             val connected = SystemClock.elapsedRealtime() - started
             status = "Waiting for the first picture…"
             var firstPicture = -1L
@@ -277,7 +313,7 @@ fun PlayerScreen(
                 onSize = { w, h -> aspect = w.toFloat() / h.toFloat() },
                 onStats = { s ->
                     if (s.shown > 0 && firstPicture < 0) firstPicture = SystemClock.elapsedRealtime() - started
-                    stats = "${if (isLive) "live" else "recorded x$atSpeed"}: $s; asked for ${size.width}x${size.height} ${size.kbps} kbps; " +
+                    stats = "${if (isLive) "live" else if (fromFile) "alert file x$atSpeed" else "recorded x$atSpeed"}: $s; asked for ${size.width}x${size.height} ${size.kbps} kbps; " +
                         "connection opened after $connected ms, first picture $firstPicture ms after the request started"
                     if (s.shown > 0) {
                         status = ""
@@ -287,12 +323,20 @@ fun PlayerScreen(
                 },
                 onFrameTime = { frameUtc.set(it) },
                 speed = if (isLive) null else atSpeed.toFloat(),
+                clipBaseMs = if (fromFile) startAt else null,
             )
         } catch (e: CancellationException) {
             throw e
         } catch (e: StreamEndedException) {
+            val ended = clip
             if (isLive) {
                 error = e.message
+            } else if (fromFile && ended != null) {
+                // The end of the alert's own file: carry on along the timeline from there.
+                val last = max(frameUtc.get(), startAt)
+                clip = ended.copy(endedAt = last)
+                pos = last
+                serial++
             } else {
                 // The end of what Blue Iris could play: if that is (nearly) now, carry on live.
                 val last = max(frameUtc.get(), pos)
@@ -663,6 +707,10 @@ fun PlayerScreen(
     }
     if (showGoTo) {
         GoToSheet(
+            cameraName = camera.displayName,
+            defaultAt = if (live) now() - 3_600_000L else pos,
+            cache = monthCache,
+            loadMonth = { start, end -> api.timeline(id, start, end, CalendarMath.STEP_MS) },
             onGo = { start, end ->
                 val w = TimelineMath.goTo(start, end, now())
                 if (w == null) {
@@ -681,7 +729,7 @@ fun PlayerScreen(
 private fun formatWhen(ms: Long): String = SimpleDateFormat("EEE MMM d, h:mm:ss a", Locale.getDefault()).format(java.util.Date(ms))
 
 @Composable
-private fun Pill(
+internal fun Pill(
     text: String,
     modifier: Modifier = Modifier,
     selected: Boolean = false,
@@ -702,56 +750,3 @@ private fun Pill(
     }
 }
 
-/** "Go to date and time": quick choices, or pick a day and a start time (plays from there, showing an hour). */
-@OptIn(ExperimentalMaterial3Api::class)
-@Composable
-private fun GoToSheet(onGo: (startMs: Long, endMs: Long) -> Unit, onDismiss: () -> Unit) {
-    var custom by remember { mutableStateOf(false) }
-    ModalBottomSheet(onDismissRequest = onDismiss, containerColor = Sl.Surface) {
-        Column(Modifier.padding(bottom = 16.dp)) {
-            Text("Go to date and time", style = MaterialTheme.typography.titleMedium, modifier = Modifier.padding(horizontal = 20.dp, vertical = 8.dp))
-            val dayStart = Calendar.getInstance().apply {
-                set(Calendar.HOUR_OF_DAY, 0); set(Calendar.MINUTE, 0); set(Calendar.SECOND, 0); set(Calendar.MILLISECOND, 0)
-            }.timeInMillis
-            TimelineMath.QuickRange.entries.forEach { kind ->
-                TextButton(
-                    onClick = {
-                        val (s, e) = TimelineMath.quickRange(kind, System.currentTimeMillis(), dayStart)
-                        onGo(s, e)
-                    },
-                    modifier = Modifier.padding(horizontal = 8.dp),
-                ) { Text(kind.label) }
-            }
-            TextButton(onClick = { custom = true }, modifier = Modifier.padding(horizontal = 8.dp)) { Text("Pick a date and time…") }
-        }
-    }
-    if (custom) {
-        var step by remember { mutableIntStateOf(0) }
-        val dateState = rememberDatePickerState()
-        val timeState = rememberTimePickerState(initialHour = 12, initialMinute = 0, is24Hour = false)
-        AlertDialog(
-            onDismissRequest = { custom = false },
-            title = { Text(if (step == 0) "Pick a day" else "Pick a start time") },
-            text = {
-                Box(Modifier.fillMaxWidth().padding(top = 8.dp), contentAlignment = Alignment.Center) {
-                    if (step == 0) DatePicker(state = dateState, title = null, headline = null, showModeToggle = false) else TimePicker(state = timeState)
-                }
-            },
-            confirmButton = {
-                TextButton(
-                    onClick = {
-                        if (step == 0) {
-                            if (dateState.selectedDateMillis != null) step = 1
-                        } else {
-                            val day = Instant.ofEpochMilli(dateState.selectedDateMillis ?: System.currentTimeMillis()).atZone(ZoneOffset.UTC).toLocalDate()
-                            val start = day.atTime(timeState.hour, timeState.minute).atZone(ZoneId.systemDefault()).toInstant().toEpochMilli()
-                            custom = false
-                            onGo(start, start + 3_600_000L)
-                        }
-                    },
-                ) { Text(if (step == 0) "Next" else "Go") }
-            },
-            dismissButton = { TextButton(onClick = { if (step == 1) step = 0 else custom = false }) { Text(if (step == 1) "Back" else "Cancel") } },
-        )
-    }
-}

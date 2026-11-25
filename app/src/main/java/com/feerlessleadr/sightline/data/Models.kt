@@ -122,6 +122,8 @@ data class AlertItem(
     val path: String,
     val clip: String,
     val offsetMs: Long,
+    /** Blue Iris's size text for the alert's recording, like `20 sec (391KB)`; its length tells how long the alert is. */
+    val fileSize: String = "",
 ) {
     companion object {
         internal fun parse(element: JsonElement): AlertItem? {
@@ -131,7 +133,7 @@ data class AlertItem(
             val camera = text("camera").ifEmpty { return null }
             val date = num("date")
             if (date <= 0L) return null
-            return AlertItem(camera, text("memo"), date * 1000, num("flags"), text("path"), text("clip"), num("offset"))
+            return AlertItem(camera, text("memo"), date * 1000, num("flags"), text("path"), text("clip"), num("offset"), text("filesize"))
         }
     }
 }

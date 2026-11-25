@@ -26,6 +26,7 @@ Install the new debug APK, open a camera, and check:
 - Tap or drag on the timeline: the picture changes to that moment; let go and it plays from there. Tap near the right end: back to live.
 - Play/pause, -10 s, +10 s, speed button (1/2/4/8/16x), LIVE button.
 - Previous/next alert buttons jump to an alert and play from 2 s before it.
+- Calendar (calendar button, bottom row): month grid, days with no recording greyed, dots on days with alerts, arrows change month, pick From and To times and tap Go; quick choices on top.
 - Layout: the picture is centred in the free space with the controls at the bottom (timeline, then 2m..48h with the calendar button, speed, LIVE, then play/pause row). Pinch the picture: it must stay visible, grow into the space above and below, pan with one finger, double tap or the badge resets; in Auto quality it gets sharper after a moment. Pinch the timeline; calendar button = go to date and time.
 - If a recording will not play, the message over the picture has a Retry button and the details; send me what it says.
 

@@ -197,6 +197,16 @@ class BlueIrisClient(
     }
 
     /**
+     * Opens an alert's recording file (`/file/clips/`) from [offsetMs] into it, played at [speedPercent]. Same container as
+     * live video; the caller falls back to the timeline if Blue Iris refuses.
+     */
+    suspend fun openClip(file: String, offsetMs: Long, speedPercent: Int, size: StreamRequest? = null): VideoStream =
+        openStream(
+            listOf("file", "clips", file), size,
+            listOf("speed" to speedPercent.coerceIn(10, 1600).toString(), "time" to offsetMs.coerceAtLeast(0).toString()),
+        )
+
+    /**
      * One frame of the recording of [camera] at [positionMs] as a JPEG (what the web app shows while a recording is
      * paused or being scrubbed), or a [BlueIrisException] if Blue Iris has nothing at that time.
      */
