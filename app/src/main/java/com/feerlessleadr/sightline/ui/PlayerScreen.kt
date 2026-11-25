@@ -79,6 +79,10 @@ import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.rememberUpdatedState
 import com.feerlessleadr.sightline.video.GroupLayout
+import com.feerlessleadr.sightline.data.AlertFlags
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.material3.Switch
+import androidx.compose.material3.Button
 import androidx.compose.ui.unit.IntSize
 import com.feerlessleadr.sightline.video.GridCell
 import com.feerlessleadr.sightline.video.GroupGrid
@@ -156,6 +160,7 @@ class PlayerApi(
     val recordedStill: suspend (camera: String, positionMs: Long, width: Int, group: Boolean) -> ByteArray,
     val timeline: suspend (camera: String, startMs: Long, endMs: Long, msecPerStep: Long) -> Timeline,
     val alerts: suspend (camera: String, startMs: Long, endMs: Long) -> List<AlertItem>,
+    val setFlags: suspend (path: String, flags: Long) -> Unit,
 )
 
 private const val DAY_MS = 86_400_000L
@@ -228,6 +233,42 @@ fun PlayerScreen(
     var clip by remember(id) { mutableStateOf<AlertClip?>(null) }
     // What the calendar learned about each month for this camera, kept while the player is open.
     val monthCache = remember(id) { HashMap<java.time.YearMonth, com.feerlessleadr.sightline.video.MonthInfo>() }
+    // Flag or protect the alert being watched (Blue Iris keeps both in the alert's flags); the change shows at once and is
+    // undone if Blue Iris refuses.
+    val markScope = rememberCoroutineScope()
+    var alertItem by remember(id) { mutableStateOf<AlertItem?>(null) }
+    var flagOverrides by remember { mutableStateOf<Map<String, Long>>(emptyMap()) }
+    var showMark by remember { mutableStateOf(false) }
+    var markBusy by remember { mutableStateOf(false) }
+    var markMessage by remember { mutableStateOf<String?>(null) }
+    fun flagsOf(a: AlertItem): Long = flagOverrides[AlertFlags.recordId(a.path)] ?: a.flags
+    fun toggleMark(bit: Int) {
+        val a = alertItem ?: return
+        if (markBusy) return
+        val key = AlertFlags.recordId(a.path)
+        val before = flagsOf(a)
+        val want = !AlertFlags.has(before, bit)
+        val after = AlertFlags.with(before, bit, want)
+        markBusy = true
+        flagOverrides = flagOverrides + (key to after)
+        markScope.launch {
+            try {
+                api.setFlags(a.path, after)
+                markMessage = if (bit == AlertFlags.FLAGGED) {
+                    if (want) "Flagged." else "Flag removed."
+                } else {
+                    if (want) "Protected: Blue Iris will keep this alert." else "No longer protected."
+                }
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: BlueIrisException) {
+                flagOverrides = flagOverrides + (key to before)
+                markMessage = AlertFlags.friendlyError(e.message)
+            } finally {
+                markBusy = false
+            }
+        }
+    }
 
     // Digital zoom (pinch the picture, drag to pan, double tap to reset). In Auto quality a zoomed picture asks Blue
     // Iris for a sharper stream once the zoom has settled, like the web app.
@@ -355,6 +396,7 @@ fun PlayerScreen(
             enterRecording(target.timeMs - 2000, true) // a group: everyone jumps to that moment (no single recording file)
             return
         }
+        alertItem = target
         val file = AlertClips.fileFor(target.clip, target.path)
         val alertClip = AlertClip(file, target.timeMs - target.offsetMs, target.timeMs + AlertClips.durationMillis(target.fileSize))
         clip = alertClip
@@ -1088,6 +1130,31 @@ fun PlayerScreen(
                         .padding(horizontal = 10.dp, vertical = 5.dp),
                 )
             }
+            // The alert being watched: tap to flag or protect it.
+            alertItem?.takeIf { AlertFlags.recordId(it.path).isNotEmpty() }?.let { a ->
+                val f = flagsOf(a)
+                val flagged = AlertFlags.has(f, AlertFlags.FLAGGED)
+                val protectedAlert = AlertFlags.has(f, AlertFlags.PROTECTED)
+                Row(
+                    Modifier
+                        .align(Alignment.TopEnd)
+                        .padding(top = labelTop)
+                        .padding(end = if (zoom > 1f) 112.dp else 0.dp)
+                        .padding(8.dp)
+                        .clip(RoundedCornerShape(12.dp))
+                        .background(Color(0x99000000))
+                        .clickable(role = Role.Button, onClickLabel = "Flag or protect this alert") {
+                            markMessage = null
+                            showMark = true
+                        }
+                        .padding(horizontal = 8.dp, vertical = 4.dp),
+                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    GlyphIcon(if (flagged) Glyph.FlagOn else Glyph.Flag, if (flagged) Sl.Person else Color.White, 18.dp)
+                    if (protectedAlert) GlyphIcon(Glyph.Lock, Sl.Accent, 18.dp)
+                }
+            }
             if (status.isNotEmpty() && error == null && !streaming && (live || playing) && !scrubbing) {
                 Text(
                     status,
@@ -1309,6 +1376,21 @@ fun PlayerScreen(
             onDismiss = { pickQuality = false },
         )
     }
+    if (showMark) {
+        alertItem?.let { a ->
+            val f = flagsOf(a)
+            MarkSheet(
+                info = camera.displayName + " · " + formatWhen(a.timeMs),
+                flagged = AlertFlags.has(f, AlertFlags.FLAGGED),
+                protectedAlert = AlertFlags.has(f, AlertFlags.PROTECTED),
+                busy = markBusy,
+                message = markMessage,
+                onToggleFlag = { toggleMark(AlertFlags.FLAGGED) },
+                onToggleProtect = { toggleMark(AlertFlags.PROTECTED) },
+                onDone = { showMark = false },
+            )
+        }
+    }
     if (showGoTo) {
         GoToSheet(
             cameraName = camera.displayName,
@@ -1381,4 +1463,45 @@ private fun listLayoutOf(group: Camera): GroupLayout? {
     val w = group.width ?: 0
     val h = group.height ?: 0
     return if (names != null && rects != null && names.size == rects.size && w > 0 && h > 0) GroupLayout(names, rects, w, h) else null
+}
+
+/** Flag or protect the alert being watched: two switches, saved in Blue Iris so Blue Iris and UI3 show them too. */
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun MarkSheet(
+    info: String,
+    flagged: Boolean,
+    protectedAlert: Boolean,
+    busy: Boolean,
+    message: String?,
+    onToggleFlag: () -> Unit,
+    onToggleProtect: () -> Unit,
+    onDone: () -> Unit,
+) {
+    ModalBottomSheet(onDismissRequest = onDone, containerColor = Sl.Surface) {
+        Column(Modifier.fillMaxWidth().padding(horizontal = 20.dp).padding(bottom = 20.dp)) {
+            Text("Flag or protect", style = MaterialTheme.typography.titleMedium)
+            Text(info, style = MaterialTheme.typography.bodySmall, color = Sl.Muted, modifier = Modifier.padding(top = 2.dp, bottom = 8.dp))
+            MarkRow("Flagged", "Marks the alert to come back to. The Flagged filter shows just these.", flagged, !busy, onToggleFlag)
+            MarkRow("Protected", "Blue Iris keeps it when it clears out old alerts and recordings, like Protect in UI3.", protectedAlert, !busy, onToggleProtect)
+            Text(
+                message ?: "Saved in Blue Iris, so UI3 and Blue Iris show it too.",
+                style = MaterialTheme.typography.bodySmall,
+                color = if (message != null && message.contains("isn't allowed")) MaterialTheme.colorScheme.error else Sl.Muted,
+                modifier = Modifier.padding(top = 8.dp),
+            )
+            Button(onClick = onDone, modifier = Modifier.fillMaxWidth().padding(top = 12.dp)) { Text("Done") }
+        }
+    }
+}
+
+@Composable
+private fun MarkRow(title: String, note: String, checked: Boolean, enabled: Boolean, onToggle: () -> Unit) {
+    Row(Modifier.fillMaxWidth().padding(vertical = 6.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+        Column(Modifier.weight(1f)) {
+            Text(title, style = MaterialTheme.typography.bodyLarge)
+            Text(note, style = MaterialTheme.typography.bodySmall, color = Sl.Muted)
+        }
+        Switch(checked = checked, onCheckedChange = { onToggle() }, enabled = enabled)
+    }
 }

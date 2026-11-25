@@ -429,6 +429,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         recordedStill = { camera, pos, width, group -> guarded { it.recordedStill(camera, pos, width, group) } },
         timeline = { camera, start, end, step -> guarded { it.timeline(camera, start, end, step) } },
         alerts = { camera, start, end -> guarded { it.cameraAlerts(camera, start, end) } },
+        setFlags = { path, flags -> guarded { it.setAlertFlags(path, flags) } },
     )
 
     /** Diagnostic for Settings -> Test video start: one line describing how [variant] of opening [camera] performed. */

@@ -159,6 +159,19 @@ class BlueIrisClient(
         }
     }
 
+    /** Sets the whole flags value of one alert (see [AlertFlags]); throws if Blue Iris refuses or the user may not change alerts. */
+    suspend fun setAlertFlags(path: String, flags: Long) {
+        val id = AlertFlags.recordId(path)
+        if (id.isEmpty()) throw BlueIrisException("This alert cannot be changed.")
+        call(
+            buildJsonObject {
+                put("cmd", "update")
+                put("path", "@" + id)
+                put("flags", flags)
+            },
+        )
+    }
+
     /** Keeps the Blue Iris session from idling out (the web app does this every 40 s). */
     suspend fun keepAlive() {
         call(buildJsonObject { put("cmd", "status") })
