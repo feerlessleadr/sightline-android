@@ -6,7 +6,7 @@ Last updated: 2026-11-24
 - Public repo feerlessleadr/sightline-android is live and secured (secret scanning, push protection, private vulnerability reporting, Dependabot alerts and security updates, `main` ruleset with no deletion or force push).
 - Owner approved the stack, GPL-3.0 and HTTPS-only access (DECISIONS.md, 2026-11-24).
 - API notes in `docs/blue-iris-api.md`: login, cookie-only stills, `camlist`/`status`/`alertlist` VERIFIED against Blue Iris 6.1.6.1.
-- **Milestone 1 (committed fab181d) plus stills grid and fingerprint unlock (written 2026-11-24, not yet committed). Milestone 1 was:** Gradle project (AGP 9.4.1, Kotlin 2.4.21, Compose, minSdk 30 (Android 11+), same versions as Embidextrous), HTTPS-only network config, `BlueIrisClient` (challenge/response login, session cookie only, no redirects, 8 MB reply cap), `camlist` parsing, sign-in screen, camera list with group chips and status dots. `gradlew test assembleDebug lintDebug` passes: 19 unit tests (MockWebServer with invented data), debug APK builds, lint has 0 errors.
+- **Milestone 1 (fab181d) plus stills grid, fingerprint unlock and minSdk 30 (14c3c7e), all pushed. Milestone 1 was:** Gradle project (AGP 9.4.1, Kotlin 2.4.21, Compose, minSdk 30 (Android 11+), same versions as Embidextrous), HTTPS-only network config, `BlueIrisClient` (challenge/response login, session cookie only, no redirects, 8 MB reply cap), `camlist` parsing, sign-in screen, camera list with group chips and status dots. `gradlew test assembleDebug lintDebug` passes: 19 unit tests (MockWebServer with invented data), debug APK builds, lint has 0 errors.
 - VERIFIED by owner on a phone (2026-11-24): sign-in works against the real server and all cameras list with green status dots. The phone trusts the proxy's certificate (trusted certs, system CAs are enough).
 - NOT verified: screen layout and polish beyond that (owner reported no problems), group chips and other status colours on real data.
 
@@ -16,7 +16,7 @@ Parity with the web app Sightline for Blue Iris (https://github.com/rw377/Sightl
 ## Next steps
 1. (Done) Owner installed the debug APK, signed in, all cameras listed.
 2. Probe results are in (cookie-only `/thumbs/` and `/video/` work; stream is H.264 Annex-B). Next: write the stream container parser (unit-tested on invented bytes), MediaCodec decoder, one live camera screen. Check an H.265 camera too.
-2b. (Code done, untested on phone) Fingerprint unlock: "Remember me" saves the password encrypted with a biometric-bound Keystore key; the lock screen at launch signs in silently. Replaces the token-only approach (DECISIONS.md 2026-11-24).
+2b. (Done, owner confirmed it works) Fingerprint unlock: "Remember me" saves the password encrypted with a biometric-bound Keystore key; the lock screen at launch signs in silently. Replaces the token-only approach (DECISIONS.md 2026-11-24).
 3. (Owner has seen it work) Camera grid with live stills, refreshed every 2 s per visible tile.
 4. Add `dependabot.yml` (Gradle, GitHub Actions) and a CodeQL workflow plus a CI workflow that runs `gradlew test lintDebug`.
 5. Release signing setup before the first published release (same pattern as Embidextrous, key held by the owner).
