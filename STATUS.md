@@ -3,7 +3,8 @@
 Last updated: 2026-11-24
 
 ## Current state
-- Project registered in the workspace (2026-11-24). Public GitHub repo feerlessleadr/sightline-android created and secured. No app code yet.
+- Project registered in the workspace (2026-11-24). Public GitHub repo feerlessleadr/sightline-android is live with the first commit (f0088de) on `main`. No app code yet.
+- Secured 2026-11-24: secret scanning and push protection, private vulnerability reporting, Dependabot alerts and security updates, a `main` ruleset (no deletion, no force push), wiki off, delete-branch-on-merge on.
 - Owner approved the stack, GPL-3.0, and HTTPS-only access (DECISIONS.md, 2026-11-24).
 
 ## Feature target
