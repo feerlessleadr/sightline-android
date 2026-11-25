@@ -61,7 +61,7 @@ Status: **Done**, **Partial**, **Planned (Mn)**, **N/A** (with the reason). "And
 | Frame step back/forward | Planned (M3, on-screen buttons; the web uses `,` `.`) |
 | Swipe between cameras (and prev/next buttons) | Planned (M3) |
 | Watch all cameras at once (group view), live and in recordings, names on pictures, tap a camera to jump to it at that moment, press again to return; hidden/disabled cameras left out; layout rules for recordings | Planned (M3) |
-| Tap video: pause/resume a recording, close a live camera back to the grid; double tap fit/fill; floating controls that fade; full screen | Planned (M3) |
+| Tap video: pause/resume a recording, close a live camera back to the grid; double tap fit/fill; floating controls that fade; full screen | Done: tap pauses/resumes or closes live, double tap fit/fill, floating controls that fade, full screen (M3) |
 | Digital zoom to 8x, pinch and pan, sharper stream while zoomed (Auto quality) | Done (pinch, pan, double tap or badge to reset; sharper stream in Auto) |
 | Quality picker Auto, 480p to 4K with data rates and live rx rate; sizes and bitrates from the tier table | Partial: picker and tiers done (player button and Settings); live receive rate M3 |
 | PTZ pad (8 directions, zoom), Home (or preset named Home), preset list, stop on release/leave/30 s/slide-off, retry 30 s; only for PTZ cameras with permission | Planned (M3) |

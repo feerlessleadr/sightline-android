@@ -2,7 +2,19 @@ package com.feerlessleadr.sightline.ui
 
 import android.graphics.BitmapFactory
 import android.os.SystemClock
+import android.content.res.Configuration
 import android.graphics.Matrix
+import androidx.activity.compose.BackHandler
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.foundation.layout.ColumnScope
+import androidx.compose.foundation.layout.displayCutoutPadding
+import androidx.compose.foundation.layout.navigationBarsPadding
+import androidx.compose.foundation.layout.statusBarsPadding
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.geometry.isSpecified
 import android.graphics.SurfaceTexture
 import androidx.compose.ui.layout.onSizeChanged
@@ -15,7 +27,6 @@ import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.gestures.calculateCentroid
 import androidx.compose.foundation.gestures.calculatePan
 import androidx.compose.foundation.gestures.calculateZoom
-import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.draw.clipToBounds
@@ -59,6 +70,7 @@ import androidx.compose.material3.rememberTimePickerState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.SideEffect
+import androidx.compose.runtime.rememberUpdatedState
 import com.feerlessleadr.sightline.video.MuLawPlayer
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -105,6 +117,8 @@ import java.util.concurrent.atomic.AtomicLong
 import kotlin.math.max
 import kotlin.math.min
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
@@ -190,6 +204,8 @@ fun PlayerScreen(
     var panX by remember(id) { mutableFloatStateOf(0f) }
     var panY by remember(id) { mutableFloatStateOf(0f) }
     var boost by remember(id) { mutableFloatStateOf(1f) }
+    var fill by remember(id) { mutableStateOf(false) } // double tap: fit the whole picture, or fill the screen
+    var fullScreen by remember { mutableStateOf(false) }
     var stageW by remember { mutableFloatStateOf(0f) }
     var stageH by remember { mutableFloatStateOf(0f) }
     LaunchedEffect(id) {
@@ -454,74 +470,120 @@ fun PlayerScreen(
         onDispose { view.keepScreenOn = false }
     }
 
-    Scaffold(
-        topBar = {
-            TopAppBar(
-                title = { Text(camera.displayName) },
-                navigationIcon = { TextButton(onClick = onBack) { Text("Back") } },
-                actions = {
-                    Box {
-                        IconAction(if (soundOn && volume > 0f) Glyph.Sound else Glyph.Muted, "Volume") { showVolume = true }
-                        DropdownMenu(expanded = showVolume, onDismissRequest = { showVolume = false }) {
-                            Row(Modifier.padding(horizontal = 12.dp), verticalAlignment = Alignment.CenterVertically) {
-                                IconAction(if (soundOn) Glyph.Sound else Glyph.Muted, if (soundOn) "Mute" else "Unmute") {
-                                    val on = !soundOn
-                                    onSound(on, if (on && volume == 0f) 1f else volume)
-                                }
-                                Slider(
-                                    value = if (soundOn) volume else 0f,
-                                    onValueChange = { onSound(it > 0f, it) },
-                                    valueRange = 0f..2f,
-                                    modifier = Modifier.width(160.dp),
-                                )
-                                Text(if (soundOn) "${(volume * 100).roundToInt()}%" else "Muted", modifier = Modifier.padding(start = 8.dp), fontSize = 13.sp)
-                            }
-                            if (askAudio && streamHasAudio == false) {
-                                Text("This camera is not sending sound.", color = Sl.Muted, fontSize = 12.sp, modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp))
-                            }
-                        }
+    // Full screen hides the system bars. In full screen, and on a landscape phone, the controls float over the picture
+    // (a tap shows or hides them; in full screen they also fade after 3 s of watching), as in the web app.
+    val configuration = LocalConfiguration.current
+    val landscape = configuration.orientation == Configuration.ORIENTATION_LANDSCAPE && configuration.screenHeightDp <= 540
+    val overlay = fullScreen || landscape
+    SystemBarsHidden(fullScreen)
+    BackHandler(enabled = fullScreen) { fullScreen = false }
+    var controlsVisible by remember { mutableStateOf(true) }
+    var lastTouch by remember { mutableLongStateOf(SystemClock.elapsedRealtime()) }
+    val busy = showVolume || pickQuality || showGoTo || scrubbing || (!live && !playing)
+    LaunchedEffect(fullScreen) { controlsVisible = true }
+    LaunchedEffect(fullScreen, controlsVisible, lastTouch, busy) {
+        if (fullScreen && controlsVisible && !busy) {
+            delay(3_000)
+            controlsVisible = false
+        }
+    }
+    // One tap on the picture: floating controls show or hide; otherwise a live camera closes back to where it was
+    // opened and a recording pauses or resumes (like UI3 and the web app).
+    val onStageTap by rememberUpdatedState<() -> Unit> {
+        lastTouch = SystemClock.elapsedRealtime()
+        when {
+            overlay -> controlsVisible = !controlsVisible
+            live -> onBack()
+            else -> togglePlay()
+        }
+    }
+    val onStageDoubleTap by rememberUpdatedState<() -> Unit> {
+        lastTouch = SystemClock.elapsedRealtime()
+        if (zoom > 1f) {
+            zoom = 1f; panX = 0f; panY = 0f
+        } else {
+            fill = !fill // fit the whole picture, or fill the screen and crop the edges
+            zoom = 1f; panX = 0f; panY = 0f
+        }
+    }
+
+    // Parts that appear in more than one layout.
+    val soundButton: @Composable () -> Unit = {
+        Box {
+            IconAction(if (soundOn && volume > 0f) Glyph.Sound else Glyph.Muted, "Volume") { showVolume = true }
+            DropdownMenu(expanded = showVolume, onDismissRequest = { showVolume = false }) {
+                Row(Modifier.padding(horizontal = 12.dp), verticalAlignment = Alignment.CenterVertically) {
+                    IconAction(if (soundOn) Glyph.Sound else Glyph.Muted, if (soundOn) "Mute" else "Unmute") {
+                        val on = !soundOn
+                        onSound(on, if (on && volume == 0f) 1f else volume)
                     }
-                    TextButton(onClick = { pickQuality = true }) { Text(quality.label.uppercase()) }
-                },
-            )
-        },
-    ) { padding ->
-        Column(Modifier.fillMaxSize().padding(padding)) {
-            // The stage takes all the room above the controls. The picture sits in its middle; zooming grows into the
-            // whole stage, not just the picture's own box (like the web app).
-            Box(
-                Modifier
-                    .weight(1f)
-                    .fillMaxWidth()
-                    .background(Color.Black)
-                    .clipToBounds()
-                    .onSizeChanged { stageW = it.width.toFloat(); stageH = it.height.toFloat() }
-                    .pointerInput(Unit) {
-                        // Double tap puts the picture back to normal size.
-                        detectTapGestures(onDoubleTap = { zoom = 1f; panX = 0f; panY = 0f })
-                    }
-                    .pointerInput(Unit) {
-                        // Two fingers zoom around the point between them; one finger pans while zoomed in.
+                    Slider(
+                        value = if (soundOn) volume else 0f,
+                        onValueChange = { onSound(it > 0f, it) },
+                        valueRange = 0f..2f,
+                        modifier = Modifier.width(160.dp),
+                    )
+                    Text(if (soundOn) "${(volume * 100).roundToInt()}%" else "Muted", modifier = Modifier.padding(start = 8.dp), fontSize = 13.sp)
+                }
+                if (askAudio && streamHasAudio == false) {
+                    Text("This camera is not sending sound.", color = Sl.Muted, fontSize = 12.sp, modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp))
+                }
+            }
+        }
+    }
+    val fullScreenButton: @Composable () -> Unit = {
+        IconAction(if (fullScreen) Glyph.ExitFullScreen else Glyph.FullScreen, if (fullScreen) "Exit full screen" else "Full screen") {
+            fullScreen = !fullScreen
+        }
+    }
+    val qualityButton: @Composable () -> Unit = {
+        TextButton(onClick = { pickQuality = true }) { Text(quality.label.uppercase()) }
+    }
+
+    // The stage takes all the room it is given. The picture sits in its middle; zooming grows into the whole stage.
+    val stage: @Composable (Modifier) -> Unit = { modifier ->
+        Box(
+            modifier
+                .background(Color.Black)
+                .clipToBounds()
+                .onSizeChanged { stageW = it.width.toFloat(); stageH = it.height.toFloat() }
+                .pointerInput(Unit) {
+                    // One handler for everything on the picture, so a drag can never be mistaken for a tap.
+                    // A press that stays inside the touch slop and ends soon is a tap (it waits a moment to see whether
+                    // a second one makes it a double tap). Two fingers zoom around the point between them; one finger
+                    // pans when the picture is zoomed in or filling the screen.
+                    val slop = viewConfiguration.touchSlop
+                    var lastTapAt = 0L
+                    var pendingTap: Job? = null
+                    coroutineScope {
                         awaitEachGesture {
-                            awaitFirstDown(requireUnconsumed = false)
+                            val down = awaitFirstDown(requireUnconsumed = false)
+                            lastTouch = SystemClock.elapsedRealtime()
+                            var moved = false
+                            var multi = false
+                            var endedAt = down.uptimeMillis
                             do {
                                 val event = awaitPointerEvent()
                                 val fingers = event.changes.count { it.pressed }
+                                endedAt = event.changes.maxOf { it.uptimeMillis }
+                                if (fingers >= 2) multi = true
+                                val mine = event.changes.firstOrNull { it.id == down.id }
+                                if (mine != null && (mine.position - down.position).getDistance() > slop) moved = true
                                 // The last event of a gesture has no finger down, so there is no centre to work with (it
                                 // comes back as "not a number", which blanked the picture the moment you let go).
                                 val centre = if (fingers > 0) event.calculateCentroid() else androidx.compose.ui.geometry.Offset.Unspecified
-                                if (fingers > 0 && centre.isSpecified && (fingers >= 2 || zoom > 1f)) {
+                                if (fingers > 0 && centre.isSpecified && (fingers >= 2 || moved) && (fingers >= 2 || zoom > 1f || fill)) {
                                     val w = size.width.toFloat()
                                     val h = size.height.toFloat()
                                     val scale = if (fingers >= 2) event.calculateZoom() else 1f
                                     val pan = event.calculatePan()
                                     val next = (zoom * scale).coerceIn(1f, ZoomMath.MAX)
-                                    if (next <= 1.01f) {
+                                    if (next <= 1.01f && !fill) {
                                         zoom = 1f; panX = 0f; panY = 0f
                                     } else {
                                         // The point under the fingers stays under them; the picture never leaves the stage.
                                         val k = next / zoom
-                                        val fit = ZoomMath.fit(w, h, aspect)
+                                        val fit = ZoomMath.fit(w, h, aspect, fill)
                                         panX = ZoomMath.clampAxis(fit[0], fit[2], w, next, centre.x - (centre.x - panX) * k + pan.x)
                                         panY = ZoomMath.clampAxis(fit[1], fit[3], h, next, centre.y - (centre.y - panY) * k + pan.y)
                                         zoom = next
@@ -529,211 +591,308 @@ fun PlayerScreen(
                                     event.changes.forEach { if (it.positionChanged()) it.consume() }
                                 }
                             } while (event.changes.any { it.pressed })
-                        }
-                    },
-            ) {
-                // The video view fills the stage; a matrix inside it fits the picture and applies the zoom, so the
-                // video is never scaled by the layout system (which made it go black).
-                AndroidView(
-                    modifier = Modifier.fillMaxSize(),
-                    factory = { context ->
-                        TextureView(context).also { tv ->
-                            tv.surfaceTextureListener = object : TextureView.SurfaceTextureListener {
-                                override fun onSurfaceTextureAvailable(st: SurfaceTexture, width: Int, height: Int) {
-                                    surface = Surface(st)
+                            if (!moved && !multi && endedAt - down.uptimeMillis < 400L) {
+                                if (pendingTap != null && endedAt - lastTapAt < 300L) {
+                                    pendingTap?.cancel()
+                                    pendingTap = null
+                                    lastTapAt = 0L
+                                    onStageDoubleTap()
+                                } else {
+                                    lastTapAt = endedAt
+                                    pendingTap = launch {
+                                        delay(300)
+                                        pendingTap = null
+                                        onStageTap()
+                                    }
                                 }
-
-                                override fun onSurfaceTextureSizeChanged(st: SurfaceTexture, width: Int, height: Int) = Unit
-
-                                override fun onSurfaceTextureDestroyed(st: SurfaceTexture): Boolean {
-                                    surface?.release()
-                                    surface = null
-                                    return true
-                                }
-
-                                override fun onSurfaceTextureUpdated(st: SurfaceTexture) = Unit
                             }
-                            if (tv.isAvailable) surface = Surface(tv.surfaceTexture!!)
                         }
-                    },
-                    update = { tv ->
-                        val w = stageW
-                        val h = stageH
-                        if (w > 0f && h > 0f) {
-                            val fit = ZoomMath.fit(w, h, aspect)
-                            val m = Matrix()
-                            m.postScale(fit[2] / w, fit[3] / h, w / 2f, h / 2f) // the texture is stretched over the view: restore its shape
-                            m.postScale(zoom, zoom, 0f, 0f)
-                            m.postTranslate(panX, panY)
-                            tv.setTransform(m)
-                        }
-                    },
-                )
-                // Covers the video only while no video frame is showing (a paused recording, or the start of a stream).
-                if (!streaming) {
-                    still?.let {
-                        Image(
-                            it, contentDescription = null, contentScale = ContentScale.Fit,
-                            modifier = Modifier.fillMaxSize().graphicsLayer {
-                                scaleX = zoom
-                                scaleY = zoom
-                                translationX = panX
-                                translationY = panY
-                                transformOrigin = TransformOrigin(0f, 0f)
-                            },
-                        )
                     }
+                },
+        ) {
+            // The video view fills the stage; a matrix inside it fits the picture and applies the zoom, so the
+            // video is never scaled by the layout system (which made it go black).
+            AndroidView(
+                modifier = Modifier.fillMaxSize(),
+                factory = { context ->
+                    TextureView(context).also { tv ->
+                        tv.surfaceTextureListener = object : TextureView.SurfaceTextureListener {
+                            override fun onSurfaceTextureAvailable(st: SurfaceTexture, width: Int, height: Int) {
+                                surface = Surface(st)
+                            }
+
+                            override fun onSurfaceTextureSizeChanged(st: SurfaceTexture, width: Int, height: Int) = Unit
+
+                            override fun onSurfaceTextureDestroyed(st: SurfaceTexture): Boolean {
+                                surface?.release()
+                                surface = null
+                                return true
+                            }
+
+                            override fun onSurfaceTextureUpdated(st: SurfaceTexture) = Unit
+                        }
+                        if (tv.isAvailable) surface = Surface(tv.surfaceTexture!!)
+                    }
+                },
+                update = { tv ->
+                    val w = stageW
+                    val h = stageH
+                    if (w > 0f && h > 0f) {
+                        val fit = ZoomMath.fit(w, h, aspect, fill)
+                        val m = Matrix()
+                        m.postScale(fit[2] / w, fit[3] / h, w / 2f, h / 2f) // the texture is stretched over the view: restore its shape
+                        m.postScale(zoom, zoom, 0f, 0f)
+                        m.postTranslate(panX, panY)
+                        tv.setTransform(m)
+                    }
+                },
+            )
+            // Covers the video only while no video frame is showing (a paused recording, or the start of a stream).
+            if (!streaming) {
+                still?.let {
+                    Image(
+                        it, contentDescription = null, contentScale = if (fill) ContentScale.Crop else ContentScale.Fit,
+                        modifier = Modifier.fillMaxSize().graphicsLayer {
+                            scaleX = zoom
+                            scaleY = zoom
+                            translationX = panX
+                            translationY = panY
+                            transformOrigin = TransformOrigin(0f, 0f)
+                        },
+                    )
                 }
+            }
+            // Small labels on the picture; they move down while the floating top bar is showing.
+            val labelTop = if (overlay && controlsVisible) 52.dp else 0.dp
+            Text(
+                if (live) "Live" else formatWhen(pos),
+                color = if (live) Sl.Live else Color.White,
+                fontSize = 12.sp,
+                fontWeight = FontWeight.SemiBold,
+                modifier = Modifier
+                    .align(Alignment.TopStart)
+                    .padding(top = labelTop)
+                    .padding(8.dp)
+                    .clip(RoundedCornerShape(12.dp))
+                    .background(Color(0x99000000))
+                    .padding(horizontal = 10.dp, vertical = 5.dp),
+            )
+            if (zoom > 1f) {
                 Text(
-                    if (live) "Live" else formatWhen(pos),
-                    color = if (live) Sl.Live else Color.White,
+                    "${"%.1f".format(zoom)}×  reset",
+                    color = Color.White,
                     fontSize = 12.sp,
-                    fontWeight = FontWeight.SemiBold,
                     modifier = Modifier
-                        .align(Alignment.TopStart)
+                        .align(Alignment.TopEnd)
+                        .padding(top = labelTop)
                         .padding(8.dp)
                         .clip(RoundedCornerShape(12.dp))
                         .background(Color(0x99000000))
+                        .clickable(role = Role.Button) { zoom = 1f; panX = 0f; panY = 0f }
                         .padding(horizontal = 10.dp, vertical = 5.dp),
                 )
-                if (zoom > 1f) {
-                    Text(
-                        "${"%.1f".format(zoom)}×  reset",
-                        color = Color.White,
-                        fontSize = 12.sp,
-                        modifier = Modifier
-                            .align(Alignment.TopEnd)
-                            .padding(8.dp)
-                            .clip(RoundedCornerShape(12.dp))
-                            .background(Color(0x99000000))
-                            .clickable(role = Role.Button) { zoom = 1f; panX = 0f; panY = 0f }
-                            .padding(horizontal = 10.dp, vertical = 5.dp),
-                    )
-                }
-                if (status.isNotEmpty() && error == null && !streaming && (live || playing) && !scrubbing) {
-                    Text(
-                        status,
-                        color = Color.White,
-                        modifier = Modifier.align(Alignment.Center).background(Color(0x99000000)).padding(horizontal = 8.dp, vertical = 4.dp),
-                    )
-                }
-                // Messages sit over the bottom of the picture so they never push the controls around.
-                val message = error ?: note
-                if (message != null) {
-                    Column(
-                        Modifier.align(Alignment.BottomCenter).padding(12.dp).clip(RoundedCornerShape(12.dp)).background(Color(0xCC000000)).padding(12.dp),
-                        horizontalAlignment = Alignment.CenterHorizontally,
-                    ) {
-                        Text(message, color = if (error != null) MaterialTheme.colorScheme.error else Sl.Text, style = MaterialTheme.typography.bodyMedium)
-                        if (error != null) {
-                            if (stats.isNotEmpty()) Text(stats, style = MaterialTheme.typography.labelSmall, color = Sl.Faint)
-                            TextButton(onClick = { attempt++ }) { Text("Retry") }
-                        }
+            }
+            if (status.isNotEmpty() && error == null && !streaming && (live || playing) && !scrubbing) {
+                Text(
+                    status,
+                    color = Color.White,
+                    modifier = Modifier.align(Alignment.Center).background(Color(0x99000000)).padding(horizontal = 8.dp, vertical = 4.dp),
+                )
+            }
+            // Messages sit over the bottom of the picture so they never push the controls around.
+            val message = error ?: note
+            if (message != null) {
+                Column(
+                    Modifier
+                        .align(Alignment.BottomCenter)
+                        .padding(bottom = if (overlay && controlsVisible) 190.dp else 0.dp)
+                        .padding(12.dp)
+                        .clip(RoundedCornerShape(12.dp))
+                        .background(Color(0xCC000000))
+                        .padding(12.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                ) {
+                    Text(message, color = if (error != null) MaterialTheme.colorScheme.error else Sl.Text, style = MaterialTheme.typography.bodyMedium)
+                    if (error != null) {
+                        if (stats.isNotEmpty()) Text(stats, style = MaterialTheme.typography.labelSmall, color = Sl.Faint)
+                        TextButton(onClick = { attempt++ }) { Text("Retry") }
                     }
                 }
             }
+        }
+    }
 
-            // Controls at the bottom: timeline, zoom of the timeline with the calendar, speed and LIVE, then the transport buttons.
-            Column(Modifier.fillMaxWidth().background(Sl.Background).padding(bottom = 4.dp)) {
-                TimelineBar(
-                    window = window,
-                    timeline = timeline,
-                    alerts = alerts,
-                    positionMs = if (live) null else pos,
-                    nowMs = nowMs,
-                    onScrub = { t ->
-                        if (!scrubbing) {
-                            scrubbing = true
-                            resumeAfterScrub = live || playing
-                            live = false
-                            playing = false
-                        }
-                        pos = min(t, TimelineMath.latestPlayable(now()))
-                        note = null
-                        frameUtc.set(0L)
-                    },
-                    onScrubEnd = {
-                        scrubbing = false
-                        if (resumeAfterScrub) {
-                            if (pos >= TimelineMath.latestPlayable(now()) - 1_000L) {
-                                goLive()
-                            } else {
-                                playing = true
-                                serial++
-                            }
-                        } else {
-                            serial++
-                        }
-                    },
-                    onZoom = { factor, anchor -> window = TimelineMath.zoomed(window, factor, anchor, now()) },
-                    modifier = Modifier.padding(horizontal = 12.dp),
-                )
-                timelineNote?.let {
+    // Timeline, the timeline zoom with the calendar, speed and LIVE, then the transport buttons.
+    val controls: @Composable ColumnScope.() -> Unit = {
+        TimelineBar(
+            window = window,
+            timeline = timeline,
+            alerts = alerts,
+            positionMs = if (live) null else pos,
+            nowMs = nowMs,
+            onScrub = { t ->
+                if (!scrubbing) {
+                    scrubbing = true
+                    resumeAfterScrub = live || playing
+                    live = false
+                    playing = false
+                }
+                pos = min(t, TimelineMath.latestPlayable(now()))
+                note = null
+                frameUtc.set(0L)
+            },
+            onScrubEnd = {
+                scrubbing = false
+                if (resumeAfterScrub) {
+                    if (pos >= TimelineMath.latestPlayable(now()) - 1_000L) {
+                        goLive()
+                    } else {
+                        playing = true
+                        serial++
+                    }
+                } else {
+                    serial++
+                }
+            },
+            onZoom = { factor, anchor -> window = TimelineMath.zoomed(window, factor, anchor, now()) },
+            modifier = Modifier.padding(horizontal = 12.dp),
+        )
+        timelineNote?.let {
+            Text(
+                if (it.contains("denied", true) || it.contains("fail", true)) "Rewinding needs a newer Blue Iris, or this account may not rewind. ($it)" else it,
+                style = MaterialTheme.typography.bodySmall,
+                color = Sl.Muted,
+                modifier = Modifier.padding(horizontal = 12.dp),
+            )
+        }
+        Row(
+            Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 4.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            Row(
+                Modifier
+                    .weight(1f)
+                    .clip(RoundedCornerShape(18.dp))
+                    .background(Sl.Surface)
+                    .padding(horizontal = 4.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceEvenly,
+            ) {
+                TimelineMath.ZOOMS.forEach { (length, label) ->
+                    val on = window.length == length
                     Text(
-                        if (it.contains("denied", true) || it.contains("fail", true)) "Rewinding needs a newer Blue Iris, or this account may not rewind. ($it)" else it,
-                        style = MaterialTheme.typography.bodySmall,
-                        color = Sl.Muted,
-                        modifier = Modifier.padding(horizontal = 12.dp),
+                        label,
+                        color = if (on) Sl.Accent else Sl.Muted,
+                        fontSize = 13.sp,
+                        fontWeight = FontWeight.SemiBold,
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(14.dp))
+                            .background(if (on) Sl.Accent.copy(alpha = 0.14f) else Color.Transparent)
+                            .clickable(role = Role.Button) { setZoom(length) }
+                            .padding(horizontal = 7.dp, vertical = 9.dp),
                     )
                 }
-                Row(
-                    Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 4.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                ) {
-                    Row(
-                        Modifier
-                            .weight(1f)
-                            .clip(RoundedCornerShape(18.dp))
-                            .background(Sl.Surface)
-                            .padding(horizontal = 4.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.SpaceEvenly,
-                    ) {
-                        TimelineMath.ZOOMS.forEach { (length, label) ->
-                            val on = window.length == length
-                            Text(
-                                label,
-                                color = if (on) Sl.Accent else Sl.Muted,
-                                fontSize = 13.sp,
-                                fontWeight = FontWeight.SemiBold,
-                                modifier = Modifier
-                                    .clip(RoundedCornerShape(14.dp))
-                                    .background(if (on) Sl.Accent.copy(alpha = 0.14f) else Color.Transparent)
-                                    .clickable(role = Role.Button) { setZoom(length) }
-                                    .padding(horizontal = 7.dp, vertical = 9.dp),
-                            )
-                        }
-                        IconAction(Glyph.Calendar, "Go to date and time") { showGoTo = true }
-                    }
-                    Pill("${speed}×", selected = speed != 1) {
-                        speed = TimelineMath.SPEEDS[(TimelineMath.SPEEDS.indexOf(speed) + 1) % TimelineMath.SPEEDS.size]
-                        if (!live && playing) {
-                            val shown = frameUtc.get()
-                            if (shown > 0) pos = shown
-                            serial++
-                        }
-                    }
-                    Pill("LIVE", selected = live, accent = Sl.Live) { if (!live) goLive() }
+                IconAction(Glyph.Calendar, "Go to date and time") { showGoTo = true }
+            }
+            Pill("${speed}×", selected = speed != 1) {
+                speed = TimelineMath.SPEEDS[(TimelineMath.SPEEDS.indexOf(speed) + 1) % TimelineMath.SPEEDS.size]
+                if (!live && playing) {
+                    val shown = frameUtc.get()
+                    if (shown > 0) pos = shown
+                    serial++
                 }
+            }
+            Pill("LIVE", selected = live, accent = Sl.Live) { if (!live) goLive() }
+        }
+        Row(
+            Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 2.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.SpaceBetween,
+        ) {
+            IconAction(Glyph.PrevAlert, "Previous alert") { jumpAlert(-1) }
+            Pill("−10 s") { seek((if (live) TimelineMath.latestPlayable(now()) else pos) - 10_000L) }
+            Box(
+                Modifier
+                    .size(56.dp)
+                    .clip(CircleShape)
+                    .background(Sl.Surface2)
+                    .clickable(role = Role.Button, onClickLabel = if (live || playing) "Pause" else "Play") { togglePlay() },
+                contentAlignment = Alignment.Center,
+            ) { GlyphIcon(if (live || playing) Glyph.Pause else Glyph.Play, Sl.Text, 28.dp) }
+            Pill("+10 s") { if (!live) seek(pos + 10_000L) }
+            IconAction(Glyph.NextAlert, "Next alert") { jumpAlert(1) }
+        }
+    }
+
+    // Any touch on the floating controls keeps them from fading.
+    val touchesControls = Modifier.pointerInput(Unit) {
+        awaitEachGesture {
+            awaitFirstDown(requireUnconsumed = false)
+            lastTouch = SystemClock.elapsedRealtime()
+        }
+    }
+
+    if (overlay) {
+        Box(Modifier.fillMaxSize().background(Color.Black)) {
+            stage(Modifier.fillMaxSize())
+            AnimatedVisibility(
+                visible = controlsVisible,
+                enter = fadeIn(tween(200)),
+                exit = fadeOut(tween(200)),
+                modifier = Modifier.align(Alignment.TopCenter),
+            ) {
                 Row(
-                    Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 2.dp),
+                    Modifier
+                        .fillMaxWidth()
+                        .background(Brush.verticalGradient(listOf(Color(0xC0000000), Color.Transparent)))
+                        .statusBarsPadding()
+                        .displayCutoutPadding()
+                        .then(touchesControls)
+                        .padding(start = 4.dp, end = 4.dp, bottom = 12.dp),
                     verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.SpaceBetween,
                 ) {
-                    IconAction(Glyph.PrevAlert, "Previous alert") { jumpAlert(-1) }
-                    Pill("−10 s") { seek((if (live) TimelineMath.latestPlayable(now()) else pos) - 10_000L) }
-                    Box(
-                        Modifier
-                            .size(56.dp)
-                            .clip(CircleShape)
-                            .background(Sl.Surface2)
-                            .clickable(role = Role.Button, onClickLabel = if (live || playing) "Pause" else "Play") { togglePlay() },
-                        contentAlignment = Alignment.Center,
-                    ) { GlyphIcon(if (live || playing) Glyph.Pause else Glyph.Play, Sl.Text, 28.dp) }
-                    Pill("+10 s") { if (!live) seek(pos + 10_000L) }
-                    IconAction(Glyph.NextAlert, "Next alert") { jumpAlert(1) }
+                    TextButton(onClick = onBack) { Text("Back") }
+                    Text(camera.displayName, style = MaterialTheme.typography.titleMedium, maxLines = 1, modifier = Modifier.weight(1f).padding(horizontal = 8.dp))
+                    soundButton()
+                    fullScreenButton()
+                    qualityButton()
                 }
+            }
+            AnimatedVisibility(
+                visible = controlsVisible,
+                enter = fadeIn(tween(200)),
+                exit = fadeOut(tween(200)),
+                modifier = Modifier.align(Alignment.BottomCenter),
+            ) {
+                Column(
+                    Modifier
+                        .fillMaxWidth()
+                        .background(Brush.verticalGradient(listOf(Color.Transparent, Color(0xD9000000)), startY = 0f))
+                        .navigationBarsPadding()
+                        .displayCutoutPadding()
+                        .then(touchesControls)
+                        .padding(top = 24.dp, bottom = 4.dp),
+                ) { controls() }
+            }
+        }
+    } else {
+        Scaffold(
+            topBar = {
+                TopAppBar(
+                    title = { Text(camera.displayName) },
+                    navigationIcon = { TextButton(onClick = onBack) { Text("Back") } },
+                    actions = {
+                        soundButton()
+                        fullScreenButton()
+                        qualityButton()
+                    },
+                )
+            },
+        ) { padding ->
+            Column(Modifier.fillMaxSize().padding(padding)) {
+                stage(Modifier.weight(1f).fillMaxWidth())
+                Column(Modifier.fillMaxWidth().background(Sl.Background).padding(bottom = 4.dp)) { controls() }
             }
         }
     }

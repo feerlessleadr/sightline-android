@@ -267,3 +267,20 @@ Append-only, newest at the bottom. Never rewrite history; reverse a decision wit
 - **UI**: speaker button in the player's top bar opens a small menu with a mute button, the volume slider and the percentage, plus a note if the camera is not sending sound.
 - **Not done**: audio in the grid tiles (the web app has none), two-way audio (not in the web app either).
 - **Impact**: new `video/MuLawPlayer.kt` (`MuLaw`, `MuLawPlayer`), `video/BlueStreamReader.kt` (audio format and samples), `video/LivePlayer.kt` (`audio`, `onHasAudio`), `data/BlueIrisClient.kt` (`audio` parameter), `ui/PlayerScreen.kt`, `ui/AppViewModel.kt`, `ui/Chrome.kt` (speaker glyphs), `MainActivity.kt`. Not yet heard on a phone.
+
+### 2026-11-25, M3: tap, double tap, floating controls, full screen and landscape
+- **Context**: next player batch. Rules read from the web source (`stageTap`, the double-tap handler, `fsIdle`, `overlayCtl`, the landscape and full-screen CSS).
+- **Decisions**:
+  - A single tap on the picture (after waiting to see it is not a double tap) closes a live camera back to the grid and pauses or resumes a recording. When the controls float over the picture (full screen, or a landscape phone) a tap shows or hides them instead.
+  - A double tap resets the zoom if zoomed; otherwise it switches between fitting the whole picture and filling the screen (edges cropped), and resets the zoom (`ZoomMath.fit` has a `cover` mode).
+  - Full screen (new button in the top bar, Back leaves it) hides the system bars. In full screen and on a landscape phone (screen at most 540 dp high) the top bar and the controls float over a full-screen picture on gradients and fade in and out (200 ms). In full screen they fade out after 3 s of watching unless something needs them (volume menu, quality or go-to sheet, scrubbing, a paused recording); on a landscape phone they stay until tapped away.
+  - The activity no longer restarts when the phone is rotated (`configChanges` in the manifest), so the player keeps its place and the stream restarts only because the video view is rebuilt.
+  - The player layout is built from shared parts (stage, controls, buttons) used by both the normal screen and the floating one.
+- **Not done**: swiping sideways to the next or previous camera (a separate item in the list), hardware-keyboard shortcuts, a landscape layout that folds the transport row into the speed row like the web app (ours floats the same controls).
+- **Impact**: `ui/PlayerScreen.kt`, `video/ZoomMath.kt` (tested), `AndroidManifest.xml`.
+
+### 2026-11-25, Player gestures: a drag is never a tap, and a filled picture can be panned
+- **Context**: owner tested: double tap (which switches to fill) looked like zooming in but the picture could not be moved, and dragging it counted as a single tap and closed the player.
+- **Cause**: panning was only allowed after a pinch zoom (zoom above 1), not in fill mode; and Compose's tap detector counts any press lifted inside the picture as a tap, even after a drag.
+- **Decision**: one gesture handler for tap, double tap, pan and pinch (the earlier two handlers are gone). A press is a tap only if it never leaves the touch slop, never used two fingers and ends within 0.4 s; a second tap within 0.3 s makes it a double tap, otherwise the single tap fires after 0.3 s. One finger pans when zoomed in or in fill mode (`ZoomMath.clampAxis` keeps the picture covering the stage); pinching out in fill mode does not drop back below the fill.
+- **Impact**: `ui/PlayerScreen.kt` only.

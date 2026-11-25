@@ -28,6 +28,7 @@ Install the new debug APK, open a camera, and check:
 - Previous/next alert buttons jump to an alert and play from 2 s before it.
 - Calendar (calendar button, bottom row): month grid, days with no recording greyed, dots on days with alerts, arrows change month, pick From and To times and tap Go; quick choices on top.
 - Sound: speaker button in the top bar (mute, volume slider up to 200%); on a camera with sound you should hear it live and in recordings at 1x; muting is instant; the setting is remembered.
+- Tap the picture: a live camera closes back to the grid, a recording pauses or resumes. Double tap: fit the whole picture or fill the screen (zoomed: back to normal). Full screen button (top bar): bars hide, controls float over the picture and fade after 3 s; tap to bring them back; Back leaves full screen. Rotate the phone to landscape: controls float; the player should keep its place.
 - Layout: the picture is centred in the free space with the controls at the bottom (timeline, then 2m..48h with the calendar button, speed, LIVE, then play/pause row). Pinch the picture: it must stay visible, grow into the space above and below, pan with one finger, double tap or the badge resets; in Auto quality it gets sharper after a moment. Pinch the timeline; calendar button = go to date and time.
 - If a recording will not play, the message over the picture has a Retry button and the details; send me what it says.
 
