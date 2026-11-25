@@ -83,7 +83,7 @@ try {
 } catch { Write-Host ("cookie-only /image/: FAILED {0}" -f $_.Exception.Message) }
 
 # Milestone 2 probes: do /thumbs/ and /video/ also accept the cookie alone? What does the live stream start with?
-# Only status codes, content types and a few header bytes are printed. No picture or video data is saved.
+# Only status codes, content types and a few header bytes are printed here; short video captures follow below.
 function New-CookieRequest([string]$url) {
   $req = [System.Net.HttpWebRequest]::Create($url)
   $req.AllowAutoRedirect = $false
@@ -136,6 +136,31 @@ try {
   $code = if ($_.Exception.Response) { [int]$_.Exception.Response.StatusCode } else { 'no response' }
   Write-Host ("cookie-only /video/: FAILED HTTP {0}" -f $code)
 } catch { Write-Host ("cookie-only /video/: FAILED {0}" -f $_.Exception.Message) }
+
+# Short captures of the live streams (the first ~2 MB), saved to the sample folder so the parser and decoder can be
+# tested against real bytes. THEY CONTAIN CAMERA PICTURES: keep them out of the repo, delete them when done.
+function Save-VideoCapture([string]$id, [string]$file, [string]$query) {
+  $req = New-CookieRequest "$BaseUrl/video/$([uri]::EscapeDataString($id))/2.0?$query"
+  $resp = $req.GetResponse()
+  $lines = @("HTTP $([int]$resp.StatusCode)", "Content-Type: $($resp.ContentType)")
+  foreach ($k in $resp.Headers.AllKeys) { if ($k -match '^X-') { $lines += "${k}: $($resp.Headers[$k])" } }
+  Set-Content -Path (Join-Path $OutDir "$file-headers.txt") -Value $lines -Encoding UTF8
+  $stream = $resp.GetResponseStream()
+  $buf = New-Object byte[] 2000000
+  $got = 0
+  while ($got -lt $buf.Length) {
+    $n = $stream.Read($buf, $got, $buf.Length - $got)
+    if ($n -le 0) { break }
+    $got += $n
+  }
+  $req.Abort()
+  [System.IO.File]::WriteAllBytes((Join-Path $OutDir "$file.bin"), $buf[0..($got - 1)])
+  Write-Host ("captured {0}: {1} bytes" -f $file, $got)
+}
+try {
+  if ($cam) { Save-VideoCapture $cam 'video-camera' 'audio=0&stream=0&w=1280&h=720&q=35&kbps=1024&extend=2' }
+  Save-VideoCapture 'index' 'video-group' 'audio=0&stream=0&w=1280&h=720&q=35&kbps=1024&extend=2'
+} catch { Write-Host ("video capture: FAILED {0}" -f $_.Exception.Message) }
 
 try { Invoke-Bi @{ cmd = 'logout'; session = $session } | Out-Null } catch {}
 Write-Host "Saved samples to $OutDir (session token redacted). Do not commit them."

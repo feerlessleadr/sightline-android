@@ -92,7 +92,7 @@ fun LoginScreen(
             ) {
                 Checkbox(checked = remember, onCheckedChange = { remember = it }, enabled = !form.busy)
                 Text(
-                    "Remember me and unlock with my fingerprint",
+                    "Remember me on this phone",
                     style = MaterialTheme.typography.bodyMedium,
                     modifier = Modifier.padding(start = 4.dp),
                 )

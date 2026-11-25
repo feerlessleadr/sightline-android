@@ -1,0 +1,229 @@
+package com.feerlessleadr.sightline.ui
+
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.RadioButton
+import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Switch
+import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
+import androidx.compose.material3.TopAppBar
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.unit.dp
+import androidx.compose.foundation.text.selection.SelectionContainer
+import androidx.compose.runtime.mutableStateListOf
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.ui.platform.LocalResources
+import com.feerlessleadr.sightline.data.LockAfter
+import com.feerlessleadr.sightline.data.ProbeVariant
+import com.feerlessleadr.sightline.data.VideoQuality
+import com.feerlessleadr.sightline.video.StreamRequest
+import com.feerlessleadr.sightline.video.playerStreamRequest
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
+
+/**
+ * Settings, grouped like the web app's Settings sheet (Live view, Video, Security, Account). The web app's
+ * other entries arrive with their screens (see docs/feature-parity.md).
+ */
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun SettingsScreen(
+    session: SessionState,
+    onBack: () -> Unit,
+    onLiveVideo: (Boolean) -> Unit,
+    onQuality: (VideoQuality) -> Unit,
+    onLockAfter: (LockAfter) -> Unit,
+    onForgetSaved: () -> Unit,
+    onProbe: suspend (camera: String, size: StreamRequest, variant: ProbeVariant) -> String,
+    onSignOut: () -> Unit,
+) {
+    var dialog by remember { mutableStateOf<String?>(null) }
+    val probeLines = remember { mutableStateListOf<String>() }
+    var probing by remember { mutableStateOf(false) }
+    val scope = rememberCoroutineScope()
+    val metrics = LocalResources.current.displayMetrics
+    Scaffold(
+        topBar = {
+            TopAppBar(
+                title = { Text("Settings") },
+                navigationIcon = { TextButton(onClick = onBack) { Text("Back") } },
+            )
+        },
+    ) { padding ->
+        Column(Modifier.fillMaxSize().padding(padding).verticalScroll(rememberScrollState())) {
+            Section("Live view")
+            SwitchRow(
+                "Live video in camera tiles",
+                "Off shows still pictures every 1.5 seconds instead, which uses less data",
+                session.liveVideo,
+                onLiveVideo,
+            )
+            Section("Video")
+            ChoiceRow("Video quality", "${session.quality.label} · ${session.quality.note}") { dialog = "quality" }
+            Section("Security")
+            if (session.savedSignIn) {
+                ChoiceRow("Lock the app", session.lockAfter.label) { dialog = "lock" }
+                if (session.lockAfter == LockAfter.Never) {
+                    Text(
+                        "Anyone who can open your unlocked phone can open your cameras. Your password is stored encrypted on this phone, but no fingerprint is needed to use it.",
+                        style = MaterialTheme.typography.bodySmall,
+                        modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
+                    )
+                }
+                ActionRow("Forget saved sign-in", "Deletes the saved password from this phone", onForgetSaved)
+            } else {
+                Text(
+                    "Tick \"Remember me\" when you sign in to unlock with your fingerprint or screen lock instead of typing your password.",
+                    style = MaterialTheme.typography.bodyMedium,
+                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp),
+                )
+            }
+            Section("Account")
+            ActionRow("Sign out", null, onSignOut)
+            Section("Developer")
+            ActionRow(
+                "Test video start",
+                if (probing) "Running… (about a minute)" else "Opens one camera several ways and times each, to find what slows video down",
+            ) {
+                if (!probing) {
+                    val cam = session.cameras?.cameras?.firstOrNull { it.online }
+                    if (cam != null) {
+                        probing = true
+                        probeLines.clear()
+                        scope.launch {
+                            val size = playerStreamRequest(
+                                metrics.widthPixels / metrics.density, metrics.heightPixels / metrics.density,
+                                metrics.density, cam.width ?: 1920, cam.height ?: 1080,
+                            )
+                            probeLines += "Camera: ${cam.displayName}, asked for ${size.width}x${size.height} ${size.kbps} kbps"
+                            val order = ProbeVariant.entries + ProbeVariant.Cookie
+                            for ((i, variant) in order.withIndex()) {
+                                probeLines += "Running: ${variant.label}…"
+                                val result = onProbe(cam.optionValue, size, variant)
+                                probeLines[probeLines.lastIndex] = (if (i == order.lastIndex) "(again) " else "") + result
+                                delay(2000)
+                            }
+                            probing = false
+                        }
+                    }
+                }
+            }
+            if (probeLines.isNotEmpty()) {
+                SelectionContainer {
+                    Column(Modifier.padding(horizontal = 16.dp, vertical = 8.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                        probeLines.forEach { Text(it, style = MaterialTheme.typography.bodySmall) }
+                    }
+                }
+            }
+        }
+    }
+    when (dialog) {
+        "quality" -> ChoiceDialog(
+            title = "Video quality",
+            options = VideoQuality.entries,
+            selected = session.quality,
+            label = { "${it.label} · ${it.note}" },
+            onPick = { onQuality(it); dialog = null },
+            onDismiss = { dialog = null },
+        )
+        "lock" -> ChoiceDialog(
+            title = "Lock the app",
+            options = LockAfter.entries,
+            selected = session.lockAfter,
+            label = { it.label },
+            onPick = { onLockAfter(it); dialog = null },
+            onDismiss = { dialog = null },
+        )
+    }
+}
+
+@Composable
+private fun Section(text: String) {
+    Text(
+        text.uppercase(),
+        style = MaterialTheme.typography.labelMedium,
+        color = MaterialTheme.colorScheme.primary,
+        modifier = Modifier.padding(start = 16.dp, end = 16.dp, top = 20.dp, bottom = 4.dp),
+    )
+}
+
+@Composable
+private fun SwitchRow(title: String, note: String, checked: Boolean, onChange: (Boolean) -> Unit) {
+    Row(
+        Modifier.fillMaxWidth().clickable { onChange(!checked) }.padding(horizontal = 16.dp, vertical = 12.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(12.dp),
+    ) {
+        Column(Modifier.weight(1f)) {
+            Text(title, style = MaterialTheme.typography.bodyLarge)
+            Text(note, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        }
+        Switch(checked = checked, onCheckedChange = onChange)
+    }
+    HorizontalDivider()
+}
+
+@Composable
+private fun ChoiceRow(title: String, value: String, onClick: () -> Unit) {
+    Column(Modifier.fillMaxWidth().clickable(onClick = onClick).padding(horizontal = 16.dp, vertical = 12.dp)) {
+        Text(title, style = MaterialTheme.typography.bodyLarge)
+        Text(value, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+    }
+    HorizontalDivider()
+}
+
+@Composable
+private fun ActionRow(title: String, note: String?, onClick: () -> Unit) {
+    Column(Modifier.fillMaxWidth().clickable(onClick = onClick).padding(horizontal = 16.dp, vertical = 12.dp)) {
+        Text(title, style = MaterialTheme.typography.bodyLarge)
+        if (note != null) Text(note, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+    }
+    HorizontalDivider()
+}
+
+@Composable
+fun <T> ChoiceDialog(
+    title: String,
+    options: List<T>,
+    selected: T,
+    label: (T) -> String,
+    onPick: (T) -> Unit,
+    onDismiss: () -> Unit,
+) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(title) },
+        text = {
+            Column {
+                options.forEach { option ->
+                    Row(
+                        Modifier.fillMaxWidth().clickable { onPick(option) },
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        RadioButton(selected = option == selected, onClick = { onPick(option) })
+                        Text(label(option), style = MaterialTheme.typography.bodyLarge)
+                    }
+                }
+            }
+        },
+        confirmButton = { TextButton(onClick = onDismiss) { Text("Close") } },
+    )
+}

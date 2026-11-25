@@ -237,6 +237,40 @@ class BlueIrisClientTest {
         }
     }
 
+    @Test fun `video opens with the cookie only and refuses non-video replies`() = runBlocking {
+        signedInClient()
+        server.enqueue(MockResponse().addHeader("Content-Type", "video/mpeg").setBody("blue"))
+        client.openVideo("Cam 1").use { stream -> assertEquals("blue", stream.source.readUtf8()) }
+        val request = server.takeRequest()
+        assertEquals("GET", request.method)
+        assertEquals("/video/Cam%201/2.0?audio=0&stream=0&extend=2", request.path)
+        assertEquals("session=sess1", request.getHeader("Cookie"))
+
+        server.enqueue(MockResponse().addHeader("Content-Type", "text/html").setBody("<html>"))
+        try {
+            client.openVideo("Cam1")
+            fail("expected BlueIrisException")
+        } catch (e: BlueIrisException) {
+            assertEquals("Blue Iris did not send video.", e.message)
+        }
+        server.enqueue(MockResponse().setResponseCode(403))
+        try {
+            client.openVideo("Cam1")
+            fail("expected SessionExpiredException")
+        } catch (_: SessionExpiredException) {
+        }
+    }
+
+    @Test fun `a restored session is sent as the cookie and body, and exposes its token`() = runBlocking {
+        client.restore("saved9")
+        assertEquals("saved9", client.sessionToken)
+        reply(camlist)
+        client.cameras()
+        val request = server.takeRequest()
+        assertEquals("session=saved9", request.getHeader("Cookie"))
+        assertEquals("saved9", Json.parseToJsonElement(request.body.readUtf8()).jsonObject["session"]!!.jsonPrimitive.content)
+    }
+
     @Test fun `logout clears the session even when the server fails`() = runBlocking {
         signedInClient()
         server.enqueue(MockResponse().setResponseCode(500))

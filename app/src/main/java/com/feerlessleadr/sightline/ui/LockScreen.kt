@@ -22,6 +22,7 @@ import androidx.compose.ui.unit.dp
 @Composable
 fun LockScreen(
     form: FormState,
+    autoSignIn: Boolean,
     onUnlock: () -> Unit,
     onUsePassword: () -> Unit,
     onForget: () -> Unit,
@@ -35,7 +36,7 @@ fun LockScreen(
     ) {
         Text("Sightline", style = MaterialTheme.typography.headlineLarge)
         Text(
-            "Locked. Use your fingerprint to sign in.",
+            if (autoSignIn) "Signing in to Blue Iris…" else "Locked. Use your fingerprint to sign in.",
             style = MaterialTheme.typography.bodyMedium,
             modifier = Modifier.padding(top = 4.dp, bottom = 24.dp),
         )
@@ -43,7 +44,7 @@ fun LockScreen(
             Text(it, color = MaterialTheme.colorScheme.error, modifier = Modifier.padding(bottom = 12.dp))
         }
         Button(onClick = onUnlock, enabled = !form.busy, modifier = Modifier.fillMaxWidth()) {
-            if (form.busy) CircularProgressIndicator(Modifier.height(20.dp)) else Text("Unlock")
+            if (form.busy) CircularProgressIndicator(Modifier.height(20.dp)) else Text(if (autoSignIn) "Try again" else "Unlock")
         }
         TextButton(onClick = onUsePassword, enabled = !form.busy) { Text("Use password instead") }
         TextButton(onClick = onForget, enabled = !form.busy) { Text("Forget saved sign-in") }

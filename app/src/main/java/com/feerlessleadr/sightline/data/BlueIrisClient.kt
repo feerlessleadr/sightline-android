@@ -21,6 +21,11 @@ import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import okhttp3.RequestBody.Companion.toRequestBody
+import okhttp3.Response
+import com.feerlessleadr.sightline.video.BlueStreamReader
+import com.feerlessleadr.sightline.video.StreamBlock
+import com.feerlessleadr.sightline.video.StreamRequest
+import okio.BufferedSource
 
 /** Something went wrong talking to Blue Iris. The message is safe to show to the user. */
 open class BlueIrisException(message: String) : Exception(message)
@@ -33,6 +38,16 @@ class SessionExpiredException : BlueIrisException("Your session expired. Please 
 
 /** The signed-in account is not allowed to do this (for example the system log for a non-admin). */
 class AccessDeniedException(message: String) : BlueIrisException(message)
+
+/** An open live-video response. [source] streams the Blue Iris container; closing it ends the connection. */
+class VideoStream internal constructor(private val response: Response) : java.io.Closeable {
+    val source: BufferedSource = response.body.source()
+
+    /** For a group stream, Blue Iris names the cameras in the picture and where each sits in these two headers. */
+    val camListHeader: String? = response.header("X-CamList")
+    val recListHeader: String? = response.header("X-RecList")
+    override fun close() = response.close()
+}
 
 /** Sends the Blue Iris session as a cookie for this one host, so the token never goes into a URL. */
 internal class SessionCookieJar(private val host: String) : CookieJar {
@@ -69,6 +84,15 @@ class BlueIrisClient(
 
     @Volatile
     private var session: String? = null
+
+    /** The current session token, for the encrypted session store. Never log it or put it in a URL. */
+    val sessionToken: String? get() = session
+
+    /** Resumes a session saved earlier. The server decides whether it is still valid on the next call. */
+    fun restore(token: String) {
+        session = token
+        cookies.session = token
+    }
 
     /** Blue Iris's challenge/response sign-in. The password is only used to compute the hash. */
     suspend fun login(user: String, password: String): LoginInfo {
@@ -138,6 +162,121 @@ class BlueIrisClient(
                 }
             } catch (e: IOException) {
                 throw BlueIrisException("Can't reach Blue Iris.")
+            }
+        }
+    }
+
+    /**
+     * Opens the live video stream of [camera]. The caller reads [VideoStream.source] and must close it.
+     * Cookie only, HTTPS only, no redirects. The call has no overall time limit, but stalls of 20 s end it.
+     */
+    suspend fun openVideo(camera: String, size: StreamRequest? = null): VideoStream {
+        if (session == null) throw SessionExpiredException()
+        val url = baseUrl.newBuilder()
+            .addPathSegment("video")
+            .addPathSegment(camera)
+            .addPathSegment("2.0")
+            .addQueryParameter("audio", "0")
+            .addQueryParameter("stream", "0")
+            .apply {
+                if (size != null) {
+                    addQueryParameter("w", size.width.toString())
+                    addQueryParameter("h", size.height.toString())
+                    addQueryParameter("q", size.quality.toString())
+                    addQueryParameter("kbps", size.kbps.toString())
+                }
+            }
+            .addQueryParameter("extend", "2")
+            .build()
+        val streaming = http.newBuilder()
+            .callTimeout(0, TimeUnit.SECONDS)
+            .readTimeout(20, TimeUnit.SECONDS)
+            .build()
+        return withContext(Dispatchers.IO) {
+            try {
+                val response = streaming.newCall(Request.Builder().url(url).get().build()).execute()
+                val problem: BlueIrisException? = when {
+                    response.isRedirect || response.code == 401 || response.code == 403 -> SessionExpiredException()
+                    !response.isSuccessful -> BlueIrisException("Blue Iris answered HTTP ${response.code}.")
+                    !response.header("Content-Type").orEmpty().startsWith("video/", ignoreCase = true) ->
+                        BlueIrisException("Blue Iris did not send video.")
+                    else -> null
+                }
+                if (problem != null) {
+                    response.close()
+                    throw problem
+                }
+                VideoStream(response)
+            } catch (e: IOException) {
+                throw BlueIrisException("Can't reach Blue Iris.")
+            }
+        }
+    }
+
+    /**
+     * Diagnostic: opens the live stream of [camera] the way [variant] says, times how long Blue Iris takes to answer,
+     * to send the stream header and to deliver the first complete video frame, then closes it. Used by the
+     * "Test video start" tool in Settings to find out what slows a stream down. Returns one line of text.
+     */
+    suspend fun probeVideo(camera: String, size: StreamRequest, variant: ProbeVariant): String {
+        val token = session ?: throw SessionExpiredException()
+        val url = baseUrl.newBuilder()
+            .addPathSegment("video")
+            .addPathSegment(camera)
+            .addPathSegment("2.0")
+            .apply { if (variant == ProbeVariant.QueryToken) addQueryParameter("session", token) }
+            .addQueryParameter("audio", "0")
+            .addQueryParameter("stream", "0")
+            .apply {
+                if (variant != ProbeVariant.Bare) {
+                    addQueryParameter("w", size.width.toString())
+                    addQueryParameter("h", size.height.toString())
+                    addQueryParameter("q", size.quality.toString())
+                    addQueryParameter("kbps", size.kbps.toString())
+                }
+            }
+            .addQueryParameter("extend", "2")
+            .build()
+        val builder = Request.Builder().url(url).get()
+        when (variant) {
+            ProbeVariant.Identity -> builder.header("Accept-Encoding", "identity")
+            ProbeVariant.Browser -> {
+                builder.header("Accept-Encoding", "identity")
+                builder.header("Accept", "*/*")
+                builder.header("User-Agent", "Mozilla/5.0 (Linux; Android 14) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0 Mobile Safari/537.36")
+                builder.header("Referer", baseUrl.toString())
+            }
+            else -> Unit
+        }
+        val client = http.newBuilder()
+            .connectionPool(okhttp3.ConnectionPool(0, 1, TimeUnit.SECONDS))
+            .callTimeout(40, TimeUnit.SECONDS)
+            .readTimeout(25, TimeUnit.SECONDS)
+            .apply { if (variant == ProbeVariant.Http11) protocols(listOf(okhttp3.Protocol.HTTP_1_1)) }
+            .build()
+        return withContext(Dispatchers.IO) {
+            val t0 = System.nanoTime()
+            fun ms() = (System.nanoTime() - t0) / 1_000_000
+            try {
+                client.newCall(builder.build()).execute().use { response ->
+                    val answered = ms()
+                    if (!response.isSuccessful) return@use "${variant.label}: HTTP ${response.code} after $answered ms"
+                    val reader = BlueStreamReader(response.body.source())
+                    val head = reader.readHeader()
+                    val headerAt = ms()
+                    var frame: StreamBlock.Video? = null
+                    while (frame == null) {
+                        when (val block = reader.next()) {
+                            is StreamBlock.Video -> frame = block
+                            StreamBlock.End -> return@use "${variant.label}: stream ended at ${ms()} ms"
+                            else -> Unit
+                        }
+                    }
+                    "${variant.label} [${response.protocol}]: answered $answered ms, header $headerAt ms, " +
+                        "first frame ${ms()} ms (${frame.data.size / 1024} KB, ${head.width}x${head.height})"
+                }
+            } catch (e: Exception) {
+                "${variant.label}: failed after ${ms()} ms (${e.javaClass.simpleName})"
             }
         }
     }

@@ -82,3 +82,17 @@ This is why MediaCodec is the leading decoder choice: parse these blocks, feed a
 3. What each bit in `alertlist.flags` means (flagged, protected, and the rest).
 4. `timeline`, `cliplist`, `ptz`, `update`, `export` response shapes.
 5. Which of those the non-admin user may call (`ptz`, `clips` and `clipcreate` flags are true for `test`).
+
+## How the web app shows live video in the camera grid (read from its source, 2026-11-24)
+- Default is live video in every tile (Settings option "Live video in camera tiles"; off = still snapshots). Snapshots are also the fallback for a group Blue Iris has no layout for, or when the stream fails.
+- It opens **one** stream of the whole Blue Iris group, `GET /video/{groupId}/2.0?audio=0&stream=0&w=&h=&q=&kbps=&extend=2`, and cuts each camera's tile out of that picture using the group's `rects` (pixel boxes in a `width` x `height` layout, from `camlist`). One connection and one decoder however many cameras there are.
+- Stream size for the group: the grid's width x device pixel ratio x 1.25, rounded up to a tier, capped at the 1440p tier (tiers: 480p 456 kbps, 720p 1024 kbps and q35, 1080p 2048 kbps, 1440p 4096 kbps and q40; 4K 8192 kbps and q50), never larger than the group's own size.
+- Up to 3 tiles the user made big (Large, Wide, Tall) get their own per-camera stream at 720p to 1080p; the rest keep sharing the group stream (browsers allow about 6 connections per server).
+- Waits for a key frame before showing anything; gives up after 10 s with no picture and falls back to snapshots, retrying after 15 s x number of failures (max 5 min). Video only runs while the Live tab is open and the page is visible.
+- Confirms the container details used here: the video block's payload length (bytes 14..17) is **big-endian**; bytes 2..5 are a 32-bit big-endian timestamp-like value used for frame durations (it can wrap).
+
+## Verified on real captures (2026-11-24, Blue Iris 6.1.6.1)
+- Container: `blue` + version byte + header length (40) + 40 header bytes (width and height little-endian at header offsets 4 and 8, codec name at 16), then `Blue` + type blocks. Video block: 18-byte header, payload length at bytes 14..17 **big-endian**, bytes 2..5 a big-endian timestamp in milliseconds. 76 to 78 video blocks and 14 status blocks in 2 MB, no audio (asked `audio=0`), parsed without a single sync error.
+- The first video block is already a key frame (NAL types 7, 8, 6, 6, 6, 5: SPS, PPS, SEI, IDR), payloads are Annex-B. Later blocks are SEI + one slice (type 1). So there is no wait for a key frame; slowness at start comes from the server and the connection.
+- A group stream sends `X-CamList` (11 quoted names) and `X-Reclist` (11 `[l,t,r,b]` boxes) headers (note the real spelling `X-Reclist`; HTTP header names are case-insensitive). The boxes are in the stream's own pixels (1280x720 when asked for 1280x720) even though the camera list describes the group as 2560 x 1080, so the header layout must be used with the stream's own size.
+- With these settings the sample camera ran at about 5 frames per second at night.

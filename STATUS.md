@@ -15,7 +15,7 @@ Parity with the web app Sightline for Blue Iris (https://github.com/rw377/Sightl
 
 ## Next steps
 1. (Done) Owner installed the debug APK, signed in, all cameras listed.
-2. Probe results are in (cookie-only `/thumbs/` and `/video/` work; stream is H.264 Annex-B). Next: write the stream container parser (unit-tested on invented bytes), MediaCodec decoder, one live camera screen. Check an H.265 camera too.
+2. Live video: single camera VERIFIED on the owner's phone (plays, start-up slow, now asks for the 720p tier like the web app). The live group grid is built but NOT yet seen on a phone. Full feature list and milestones: `docs/feature-parity.md`. Still to do in M2: per-camera tile sizes, reorder, big-tile own streams, activity borders and AI labels, web palette.
 2b. (Done, owner confirmed it works) Fingerprint unlock: "Remember me" saves the password encrypted with a biometric-bound Keystore key; the lock screen at launch signs in silently. Replaces the token-only approach (DECISIONS.md 2026-11-24).
 3. (Owner has seen it work) Camera grid with live stills, refreshed every 2 s per visible tile.
 4. Add `dependabot.yml` (Gradle, GitHub Actions) and a CodeQL workflow plus a CI workflow that runs `gradlew test lintDebug`.
@@ -23,7 +23,8 @@ Parity with the web app Sightline for Blue Iris (https://github.com/rw377/Sightl
 6. Lint leftovers (warnings only): `SharedPreferences.edit` KTX suggestion, version bumps (left to Dependabot).
 
 ## Owner must do
-- Nothing right now. (Fingerprint unlock was tried on a phone and works.)
+- Video start measured fast on the phone (about 0.1-0.9 s); the cause of the earlier slowness was not found, see DECISIONS.md 2026-11-25. If it gets slow again, run Settings > Developer > Test video start and send the lines.
+- Still to check on the phone: Live grid (plays? Stills mode? sizes), Never lock flow, lock-after minutes, quality picker.
 
 ## Open questions
 - Latency and quality targets for live video on mobile data vs Wi-Fi.
@@ -35,5 +36,10 @@ $env:JAVA_HOME = 'C:\Program Files\Android\Android Studio\jbr'; $env:Path = "$en
 .\gradlew.bat test assembleDebug lintDebug
 ```
 `local.properties` (git-ignored) needs `sdk.dir` with escaped separators, for example `sdk.dir=C\:\\Users\\<you>\\AppData\\Local\\Android\\Sdk`. Gradle wrapper is 9.8.1, copied from Embidextrous.
+
+
+
+
+
 
 
