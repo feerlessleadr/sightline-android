@@ -79,6 +79,9 @@ import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.rememberUpdatedState
 import com.feerlessleadr.sightline.video.GroupLayout
+import com.feerlessleadr.sightline.data.Exports
+import com.feerlessleadr.sightline.data.ExportOptions
+import androidx.compose.material3.LinearProgressIndicator
 import com.feerlessleadr.sightline.data.AlertFlags
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.material3.Switch
@@ -190,6 +193,12 @@ fun PlayerScreen(
     soundOn: Boolean,
     volume: Float,
     onSound: (on: Boolean, volume: Float) -> Unit,
+    exportOptions: ExportOptions,
+    onExportOptions: (ExportOptions) -> Unit,
+    download: DownloadState?,
+    onDownloadAlert: (AlertItem, String) -> Unit,
+    onCancelDownload: () -> Unit,
+    onDismissDownload: () -> Unit,
     onQuality: (VideoQuality) -> Unit,
     onBack: () -> Unit,
 ) {
@@ -239,6 +248,7 @@ fun PlayerScreen(
     var alertItem by remember(id) { mutableStateOf<AlertItem?>(null) }
     var flagOverrides by remember { mutableStateOf<Map<String, Long>>(emptyMap()) }
     var showMark by remember { mutableStateOf(false) }
+    var showDownload by remember { mutableStateOf(false) }
     var markBusy by remember { mutableStateOf(false) }
     var markMessage by remember { mutableStateOf<String?>(null) }
     fun flagsOf(a: AlertItem): Long = flagOverrides[AlertFlags.recordId(a.path)] ?: a.flags
@@ -1163,6 +1173,32 @@ fun PlayerScreen(
                 )
             }
             // Messages sit over the bottom of the picture so they never push the controls around.
+            // A download in progress (or just finished or failed): what it is doing, with Cancel or OK.
+            download?.let { d ->
+                Column(
+                    Modifier
+                        .align(Alignment.TopCenter)
+                        .padding(top = labelTop + 48.dp)
+                        .padding(horizontal = 12.dp)
+                        .clip(RoundedCornerShape(12.dp))
+                        .background(Color(0xE6000000))
+                        .padding(12.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                ) {
+                    Text(d.text, color = if (d.failed) MaterialTheme.colorScheme.error else Sl.Text, style = MaterialTheme.typography.bodyMedium)
+                    if (!d.finished) {
+                        val percent = d.percent
+                        if (percent != null) {
+                            LinearProgressIndicator(progress = { percent / 100f }, modifier = Modifier.padding(top = 8.dp).fillMaxWidth(0.8f))
+                        } else {
+                            LinearProgressIndicator(modifier = Modifier.padding(top = 8.dp).fillMaxWidth(0.8f))
+                        }
+                        TextButton(onClick = onCancelDownload) { Text("Cancel") }
+                    } else {
+                        TextButton(onClick = onDismissDownload) { Text("OK") }
+                    }
+                }
+            }
             val message = error ?: note
             if (message != null) {
                 Column(
@@ -1387,7 +1423,23 @@ fun PlayerScreen(
                 message = markMessage,
                 onToggleFlag = { toggleMark(AlertFlags.FLAGGED) },
                 onToggleProtect = { toggleMark(AlertFlags.PROTECTED) },
+                onDownload = if (Exports.canExport(a)) ({ showMark = false; showDownload = true }) else null,
                 onDone = { showMark = false },
+            )
+        }
+    }
+    if (showDownload) {
+        alertItem?.let { a ->
+            DownloadSheet(
+                cameraName = camera.displayName,
+                alert = a,
+                options = exportOptions,
+                onOptions = onExportOptions,
+                onDownload = {
+                    showDownload = false
+                    onDownloadAlert(a, camera.displayName)
+                },
+                onDismiss = { showDownload = false },
             )
         }
     }
@@ -1476,12 +1528,16 @@ private fun MarkSheet(
     message: String?,
     onToggleFlag: () -> Unit,
     onToggleProtect: () -> Unit,
+    onDownload: (() -> Unit)?,
     onDone: () -> Unit,
 ) {
     ModalBottomSheet(onDismissRequest = onDone, containerColor = Sl.Surface) {
         Column(Modifier.fillMaxWidth().padding(horizontal = 20.dp).padding(bottom = 20.dp)) {
-            Text("Flag or protect", style = MaterialTheme.typography.titleMedium)
+            Text(if (onDownload != null) "This alert" else "Flag or protect", style = MaterialTheme.typography.titleMedium)
             Text(info, style = MaterialTheme.typography.bodySmall, color = Sl.Muted, modifier = Modifier.padding(top = 2.dp, bottom = 8.dp))
+            if (onDownload != null) {
+                TextButton(onClick = onDownload) { Text("Download this alert (MP4)…") }
+            }
             MarkRow("Flagged", "Marks the alert to come back to. The Flagged filter shows just these.", flagged, !busy, onToggleFlag)
             MarkRow("Protected", "Blue Iris keeps it when it clears out old alerts and recordings, like Protect in UI3.", protectedAlert, !busy, onToggleProtect)
             Text(

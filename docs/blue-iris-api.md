@@ -110,3 +110,9 @@ This is why MediaCodec is the leading decoder choice: parse these blocks, feed a
 - **Recorded still**: `GET /time/{camera}?jpeg&isolate&pos={ms}&w&q=70`.
 - **`timeline`**: `{cmd:"timeline", startdate, enddate (seconds), msecpp, camera}` -> `data.clips[] {x1,x2}` and `data.alerts[] {x1,x2,type}`; time = `startdate*1000 + x * msecpp`. `type` holds the alert flag bits. Older Blue Iris 5.x may refuse it.
 - **Per-camera alerts**: `alertlist` with `camera` = the id, `view:"alerts"`, last 7 days, for previous/next alert.
+
+## Export (MP4 download), from the web app's source (2026-11-25; first use on a real server pending)
+- Start: `{cmd:"export", path:<recording file, e.g. @123.bvr>, format:1, profile:0-3, substream:false, audio, reencode, overlay, startms, msec}` -> `data {path, uri}`. Alerts with flags bit 16 start part-way into the file.
+- Queue: `{cmd:"export"}` -> array of `{path, uri, status: "done"|"error"|"active"|other (waiting), progress}`; poll about every 1.5 s.
+- Cancel: `{cmd:"export", path, delete:true}` (Blue Iris 6; older versions cannot stop an export).
+- File: `GET /clips/<uri>` (the web app adds the session to the address; the app uses the cookie).

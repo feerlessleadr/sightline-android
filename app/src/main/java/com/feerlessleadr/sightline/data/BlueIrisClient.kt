@@ -3,6 +3,7 @@ package com.feerlessleadr.sightline.data
 import java.io.IOException
 import java.util.concurrent.TimeUnit
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.SerializationException
 import kotlinx.serialization.json.JsonElement
@@ -156,6 +157,99 @@ class BlueIrisClient(
                 dateSeconds = o["date"]?.jsonPrimitive?.contentOrNull?.toDoubleOrNull()?.toLong() ?: 0L,
                 flags = o["flags"]?.jsonPrimitive?.contentOrNull?.toDoubleOrNull()?.toLong() ?: 0L,
             )
+        }
+    }
+
+    /** Asks Blue Iris to prepare an MP4 (`export`). It answers where the job sits in its queue and where the result will be. */
+    suspend fun startExport(request: ExportRequest): ExportStart {
+        val o = request.options
+        val reply = try {
+            call(
+                buildJsonObject {
+                    put("cmd", "export")
+                    put("path", request.file)
+                    put("format", 1)
+                    put("profile", o.profile)
+                    put("substream", false)
+                    put("audio", o.audio)
+                    put("reencode", o.reencode)
+                    put("overlay", o.reencode && o.overlay) // Blue Iris can only add the overlay while re-encoding
+                    put("startms", request.startMs)
+                    put("msec", request.lengthMs)
+                },
+            )
+        } catch (e: SessionExpiredException) {
+            throw e
+        } catch (e: BlueIrisException) {
+            throw BlueIrisException(Exports.friendlyError(e.message))
+        }
+        val data = reply.data as? JsonObject
+        return ExportStart(
+            path = data?.get("path")?.jsonPrimitive?.contentOrNull.orEmpty(),
+            uri = data?.get("uri")?.jsonPrimitive?.contentOrNull.orEmpty(),
+        )
+    }
+
+    /** Blue Iris's export queue: what is waiting, being made, finished or failed. */
+    suspend fun exportQueue(): List<ExportQueueItem> {
+        val reply = call(buildJsonObject { put("cmd", "export") })
+        val array = reply.data as? kotlinx.serialization.json.JsonArray ?: return emptyList()
+        return array.mapNotNull { e ->
+            val o = e as? JsonObject ?: return@mapNotNull null
+            ExportQueueItem(
+                path = o["path"]?.jsonPrimitive?.contentOrNull.orEmpty(),
+                uri = o["uri"]?.jsonPrimitive?.contentOrNull.orEmpty(),
+                status = o["status"]?.jsonPrimitive?.contentOrNull.orEmpty(),
+                progress = o["progress"]?.jsonPrimitive?.contentOrNull?.toDoubleOrNull() ?: 0.0,
+            )
+        }
+    }
+
+    /** Takes a job out of Blue Iris's export queue (Blue Iris 6; older versions cannot stop an export). */
+    suspend fun deleteExport(path: String) {
+        call(
+            buildJsonObject {
+                put("cmd", "export")
+                put("path", path)
+                put("delete", true)
+            },
+            checkResult = false,
+        )
+    }
+
+    /**
+     * Fetches a finished export (`/clips/<uri>`) into [out], reporting bytes copied and the total (-1 if unknown). Cookie
+     * only, no redirects; there is no overall time limit (a long clip takes a while) but a stall of 30 s ends it.
+     */
+    suspend fun downloadExport(uri: String, out: java.io.OutputStream, onProgress: (done: Long, total: Long) -> Unit) {
+        if (session == null) throw SessionExpiredException()
+        // Blue Iris names the file the way Windows does (`Clipboard\Camera.2026....mp4`); a web address needs slashes.
+        val url = baseUrl.newBuilder().addPathSegment("clips").addPathSegments(uri.replace('\\', '/').trimStart('/')).build()
+        val streaming = http.newBuilder().callTimeout(0, TimeUnit.SECONDS).readTimeout(30, TimeUnit.SECONDS).build()
+        withContext(Dispatchers.IO) {
+            try {
+                streaming.newCall(Request.Builder().url(url).get().build()).execute().use { response ->
+                    if (response.isRedirect || response.code == 401 || response.code == 403) throw SessionExpiredException()
+                    if (!response.isSuccessful) throw BlueIrisException("Blue Iris answered HTTP ${response.code}.")
+                    if (response.header("Content-Type").orEmpty().startsWith("text/", ignoreCase = true)) {
+                        throw BlueIrisException("Blue Iris did not send the clip.")
+                    }
+                    val total = response.body.contentLength()
+                    val source = response.body.source()
+                    val buffer = ByteArray(64 * 1024)
+                    var done = 0L
+                    while (true) {
+                        val n = source.read(buffer)
+                        if (n < 0) break
+                        out.write(buffer, 0, n)
+                        done += n
+                        onProgress(done, total)
+                        ensureActive()
+                    }
+                }
+            } catch (e: IOException) {
+                throw BlueIrisException("Can't reach Blue Iris.")
+            }
         }
     }
 

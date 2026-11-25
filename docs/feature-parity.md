@@ -73,7 +73,7 @@ Status: **Done**, **Partial**, **Planned (Mn)**, **N/A** (with the reason). "And
 | Short haptic buzz on long-press actions (found in the source only) | Done (M2 round 2) |
 | Troubleshooting switches `?grpdebug=1` (outline each camera on the group picture) and `?cliprewind=0/1` (force clip-list rewinding) | Planned (M6): hidden developer options |
 | Flag / protect an alert (`update` command), flags shown, "Flagged" filter; clear message without permission | Player done (M3: chip and sheet); list icons and Flagged filter with the alerts tab (M4) |
-| Download alert or any range as MP4 (export): re-encode H.264 (default) or original, encoder profile 0 to 3, overlay, audio, choose start/end by draggable handles or set-at-playhead, up to 2 h, size estimate, progress, cancel, readable file name, permission message | Planned (M3 range UI, M4 alert entry) |
+| Download alert or any range as MP4 (export): re-encode H.264 (default) or original, encoder profile 0 to 3, overlay, audio, choose start/end by draggable handles or set-at-playhead, up to 2 h, size estimate, progress, cancel, readable file name, permission message | Step 1 done (M3: whole alert, options, progress, cancel, saved to Downloads); choosing a start and end next; list entry with the alerts tab (M4) |
 | Link to open full Blue Iris UI (UI3) | Planned (M5): opens in the browser |
 
 ## Alerts

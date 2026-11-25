@@ -110,6 +110,12 @@ class MainActivity : FragmentActivity() {
                         soundOn = session.soundOn,
                         volume = session.volume,
                         onSound = viewModel::setSound,
+                        exportOptions = session.export,
+                        onExportOptions = viewModel::setExportOptions,
+                        download = session.download,
+                        onDownloadAlert = viewModel::startAlertDownload,
+                        onCancelDownload = viewModel::cancelDownload,
+                        onDismissDownload = viewModel::dismissDownload,
                         onQuality = viewModel::setQuality,
                         onBack = { liveCamera = null },
                     )

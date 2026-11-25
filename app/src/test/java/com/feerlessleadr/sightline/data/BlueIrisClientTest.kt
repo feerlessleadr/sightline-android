@@ -325,4 +325,58 @@ class BlueIrisClientTest {
         reply("""{"result":"success","data":[{"camera":"Cam1","date":1800000100,"memo":"","flags":0,"path":"@1.bvr","clip":"@2.bvr","offset":500,"filesize":"20 sec (391KB)"}]}""")
         assertEquals("20 sec (391KB)", client.cameraAlerts("Cam1", 0L, 2_000_000_000_000L)[0].fileSize)
     }
+
+    @Test fun `an export is asked for with the whole request and the answer says where it will be`() = runBlocking {
+        signedInClient()
+        reply("""{"result":"success","data":{"path":"@9.mp4","uri":"Export/9.mp4"}}""")
+        val start = client.startExport(ExportRequest("@100.bvr", 2000L, 25000L, ExportOptions(reencode = false, profile = 2, audio = false, overlay = true)))
+        assertEquals("@9.mp4", start.path)
+        assertEquals("Export/9.mp4", start.uri)
+        val body = Json.parseToJsonElement(server.takeRequest().body.readUtf8()).jsonObject
+        assertEquals("export", body["cmd"]!!.jsonPrimitive.content)
+        assertEquals("@100.bvr", body["path"]!!.jsonPrimitive.content)
+        assertEquals("2", body["profile"]!!.jsonPrimitive.content)
+        assertEquals("false", body["reencode"]!!.jsonPrimitive.content)
+        assertEquals("false", body["overlay"]!!.jsonPrimitive.content) // no overlay without re-encoding
+        assertEquals("false", body["audio"]!!.jsonPrimitive.content)
+        assertEquals("2000", body["startms"]!!.jsonPrimitive.content)
+        assertEquals("25000", body["msec"]!!.jsonPrimitive.content)
+    }
+
+    @Test fun `a refused export explains itself`() = runBlocking {
+        signedInClient()
+        reply("""{"result":"fail","data":{"reason":"Access denied"}}""")
+        try {
+            client.startExport(ExportRequest("@1.bvr", 0, 1000, ExportOptions()))
+            fail("expected BlueIrisException")
+        } catch (e: BlueIrisException) {
+            assertEquals("Your Blue Iris user isn't allowed to export clips.", e.message)
+        }
+    }
+
+    @Test fun `the export queue and a finished clip are read`() = runBlocking {
+        signedInClient()
+        reply("""{"result":"success","data":[{"path":"@9.mp4","uri":"Export/9.mp4","status":"active","progress":42.5},{"path":"@8.mp4","status":"done","uri":"x"}]}""")
+        val queue = client.exportQueue()
+        assertEquals(listOf("active", "done"), queue.map { it.status })
+        assertEquals(42.5, queue[0].progress, 0.001)
+
+        server.enqueue(MockResponse().addHeader("Content-Type", "video/mp4").setBody("clipbytes"))
+        val out = java.io.ByteArrayOutputStream()
+        var seen = 0L
+        client.downloadExport("Export/9.mp4", out) { done, _ -> seen = done }
+        assertEquals("clipbytes", out.toString())
+        assertEquals(9L, seen)
+        server.takeRequest()
+        val request = server.takeRequest()
+        assertEquals("/clips/Export/9.mp4", request.path)
+        assertEquals("session=sess1", request.getHeader("Cookie"))
+    }
+
+    @Test fun `a Windows style export name is fetched with slashes`() = runBlocking {
+        signedInClient()
+        server.enqueue(MockResponse().addHeader("Content-Type", "video/mp4").setBody("x"))
+        client.downloadExport("Clipboard\\FrontDrive.20261125_193758715Z-193859Z.5.mp4", java.io.ByteArrayOutputStream()) { _, _ -> }
+        assertEquals("/clips/Clipboard/FrontDrive.20261125_193758715Z-193859Z.5.mp4", server.takeRequest().path)
+    }
 }

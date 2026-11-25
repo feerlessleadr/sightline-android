@@ -2,6 +2,18 @@ package com.feerlessleadr.sightline.ui
 
 import android.app.Application
 import android.content.Context
+import com.feerlessleadr.sightline.data.Exports
+import com.feerlessleadr.sightline.data.ExportStart
+import com.feerlessleadr.sightline.data.ExportOptions
+import com.feerlessleadr.sightline.data.ExportQueue
+import kotlin.math.roundToInt
+import kotlinx.coroutines.withContext
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.NonCancellable
+import kotlinx.coroutines.Job
+import android.provider.MediaStore
+import android.os.SystemClock
+import android.content.ContentValues
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.feerlessleadr.sightline.data.AddressResult
@@ -61,6 +73,10 @@ data class SessionState(
     val motionBoxes: Boolean = false,
     /** How sensitive the boxes are, 1 (only big movement) to 10 (almost any change); 5 is balanced. */
     val motionSensitivity: Int = 5,
+    /** How exports (MP4 downloads of alerts) are made. */
+    val export: ExportOptions = ExportOptions(),
+    /** The download being made or just finished (shown over the player); null when there is none. */
+    val download: DownloadState? = null,
     /** Sound in the player (on or muted) and its volume, 0 to 2 (1 is normal). */
     val soundOn: Boolean = true,
     val volume: Float = 1f,
@@ -79,6 +95,15 @@ data class SessionState(
  * [pendingSave]: a successful sign-in the owner asked to remember, waiting for the fingerprint prompt that
  * authorises saving it. It is held in memory only until that prompt finishes or is cancelled.
  */
+/** A download of an alert as an MP4: what to tell the owner, how far it is (null = unknown), and whether it ended. */
+data class DownloadState(
+    val text: String,
+    val percent: Int?,
+    val name: String,
+    val finished: Boolean = false,
+    val failed: Boolean = false,
+)
+
 data class UiState(
     val form: FormState,
     val session: SessionState? = null,
@@ -306,6 +331,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         val old = client
         client = null
         memoryCredentials = null
+        downloadJob?.cancel()
         sessions.clear()
         _state.update { UiState(form = it.form.copy(busy = false, error = null), locked = true) }
         if (old != null) viewModelScope.launch { old.logout() }
@@ -460,6 +486,12 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         highlight = prefs.getBoolean(KEY_HIGHLIGHT, true),
         aiLabels = prefs.getBoolean(KEY_AI_LABELS, true),
         motionBoxes = prefs.getBoolean(KEY_MOTION_BOXES, false),
+        export = ExportOptions(
+            reencode = prefs.getBoolean(KEY_EXPORT_REENCODE, true),
+            profile = prefs.getInt(KEY_EXPORT_PROFILE, 0).coerceIn(0, 3),
+            audio = prefs.getBoolean(KEY_EXPORT_AUDIO, true),
+            overlay = prefs.getBoolean(KEY_EXPORT_OVERLAY, true),
+        ),
         soundOn = prefs.getBoolean(KEY_SOUND_ON, true),
         volume = prefs.getFloat(KEY_VOLUME, 1f).coerceIn(0f, 2f),
         motionSensitivity = prefs.getInt(KEY_MOTION_SENS, 5).coerceIn(1, 10),
@@ -532,6 +564,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         val old = client
         client = null
         memoryCredentials = null
+        downloadJob?.cancel() // a download does not go on after signing out
         sessions.clear()
         // Signing out with the "Never" lock choice means really signed out: forget the saved sign-in too, or the
         // app would just sign straight back in.
@@ -632,6 +665,188 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         }
     }
 
+    // ---- downloading an alert as an MP4 ----
+
+    private var downloadJob: Job? = null
+
+    private fun setDownload(state: DownloadState?) {
+        _state.update { s -> s.session?.let { s.copy(session = it.copy(download = state)) } ?: s }
+    }
+
+    /** Hides the download's last message once the owner has read it. */
+    fun dismissDownload() {
+        if (downloadJob?.isActive != true) setDownload(null)
+    }
+
+    /** Remembers how exports should be made (re-encode or original, encoder profile, overlay, audio). */
+    fun setExportOptions(options: ExportOptions) {
+        prefs.edit()
+            .putBoolean(KEY_EXPORT_REENCODE, options.reencode)
+            .putInt(KEY_EXPORT_PROFILE, options.profile.coerceIn(0, 3))
+            .putBoolean(KEY_EXPORT_AUDIO, options.audio)
+            .putBoolean(KEY_EXPORT_OVERLAY, options.overlay)
+            .apply()
+        _state.update { s -> s.session?.let { s.copy(session = it.copy(export = options.copy(profile = options.profile.coerceIn(0, 3)))) } ?: s }
+    }
+
+    /**
+     * Has Blue Iris prepare an MP4 of [alert], waits for it (Blue Iris re-encodes it, which can take a while), then saves
+     * it in the phone's Downloads folder. It carries on if the player is closed; signing out or locking stops it.
+     */
+    fun startAlertDownload(alert: AlertItem, cameraName: String) {
+        if (downloadJob?.isActive == true) return
+        val session = _state.value.session ?: return
+        val current = client ?: return
+        val request = Exports.forAlert(alert, session.export)
+        val name = Exports.fileName(cameraName, alert.timeMs)
+        downloadJob = viewModelScope.launch {
+            var jobPath = ""
+            try {
+                setDownload(DownloadState("Asking Blue Iris to prepare the clip…", null, name))
+                // What is already queued, so that our own job can be told apart if Blue Iris names it differently.
+                val before = try { current.exportQueue().map { ExportQueue.keyOf(it) }.toSet() } catch (e: BlueIrisException) { emptySet() }
+                val started = current.startExport(request)
+                jobPath = started.path
+                val uri = waitForExport(current, started, before, name)
+                // The file may take a moment to appear once Blue Iris has taken the job out of its queue.
+                var attempt = 0
+                while (true) {
+                    try {
+                        saveExport(current, uri, name)
+                        break
+                    } catch (e: SessionExpiredException) {
+                        throw e
+                    } catch (e: BlueIrisException) {
+                        if (++attempt >= 6) throw BlueIrisException("Blue Iris prepared the clip but would not hand it over (${e.message})")
+                        setDownload(DownloadState("Waiting for Blue Iris to finish writing the clip…", null, name))
+                        delay(2_000)
+                    }
+                }
+                setDownload(DownloadState("Saved to Downloads: $name", 100, name, finished = true))
+            } catch (e: CancellationException) {
+                withContext(NonCancellable) { setDownload(DownloadState(cancelExport(current, jobPath), null, name, finished = true)) }
+                throw e
+            } catch (e: SessionExpiredException) {
+                if (client === current) endSession(e.message)
+                setDownload(null)
+            } catch (e: BlueIrisException) {
+                setDownload(DownloadState(e.message ?: "The download failed.", null, name, finished = true, failed = true))
+            }
+        }
+    }
+
+    /** Stops waiting for the clip and takes it out of Blue Iris's queue. */
+    fun cancelDownload() {
+        val job = downloadJob ?: return
+        if (!job.isActive) return
+        setDownload(_state.value.session?.download?.copy(text = "Cancelling…", percent = null))
+        job.cancel()
+    }
+
+    /** Asks Blue Iris to drop the job and says how that went (older Blue Iris versions cannot stop an export). */
+    private suspend fun cancelExport(current: BlueIrisClient, path: String): String {
+        if (path.isEmpty()) return "Download cancelled."
+        var gone = false
+        try {
+            current.deleteExport(path)
+            delay(1_500)
+            val item = current.exportQueue().firstOrNull { it.path == path }
+            gone = item == null || item.status == "error"
+        } catch (e: BlueIrisException) {
+            // Best effort.
+        }
+        return if (gone) "Download cancelled." else "Cancelled here. This Blue Iris can't stop exports, so it will still finish in its export folder."
+    }
+
+    /** Polls Blue Iris's export queue until the clip is ready and returns where it is; gives up when it stops making progress. */
+    private suspend fun waitForExport(current: BlueIrisClient, started: ExportStart, before: Set<String>, name: String): String {
+        val t0 = SystemClock.elapsedRealtime()
+        var moved = t0
+        var seen = ""
+        var misses = 0
+        var errors = 0
+        var everSeen = false
+        var emptyPolls = 0
+        var lastUri = ""
+        while (true) {
+            delay(1_500)
+            val now = SystemClock.elapsedRealtime()
+            if (now - moved > 180_000L || now - t0 > 3_600_000L) {
+                throw BlueIrisException("Blue Iris stopped making progress on this clip. Try again later, or choose \"Original recording\".")
+            }
+            val queue = try {
+                current.exportQueue().also { errors = 0 }
+            } catch (e: SessionExpiredException) {
+                throw e
+            } catch (e: BlueIrisException) {
+                if (++errors > 5) throw e
+                continue
+            }
+            val item = ExportQueue.find(queue, started, before)
+            if (item == null) {
+                // Blue Iris takes a finished job out of its queue (a copy of the original recording is done at once and
+                // may never be listed). So a job that has gone, after being seen or after a few looks, is finished: its
+                // file is where Blue Iris said when it took the export.
+                emptyPolls++
+                if (started.uri.isNotEmpty() && ((everSeen && emptyPolls >= 2) || emptyPolls >= 3)) return lastUri.ifEmpty { started.uri }
+                if (++misses > 20) {
+                    // Say what Blue Iris answered (record names only), so a different reply shape can be seen and fixed.
+                    throw BlueIrisException("Couldn't find the clip in Blue Iris's export queue. " + ExportQueue.describe(queue, started))
+                }
+                continue
+            }
+            everSeen = true
+            emptyPolls = 0
+            if (item.uri.isNotEmpty()) lastUri = item.uri
+            val key = item.status + ":" + item.progress.roundToInt()
+            if (key != seen) {
+                seen = key
+                moved = now
+            }
+            when (item.status) {
+                "done" -> return item.uri.ifEmpty { started.uri }.ifEmpty { throw BlueIrisException("Blue Iris didn't say where the clip was saved.") }
+                "error" -> throw BlueIrisException("Blue Iris couldn't export this alert.")
+                "active" -> setDownload(DownloadState("Preparing the clip… ${item.progress.roundToInt()}%", item.progress.roundToInt(), name))
+                else -> setDownload(DownloadState("Waiting in Blue Iris's export queue…", null, name))
+            }
+        }
+    }
+
+    /** Copies the finished clip from Blue Iris into the Downloads folder (no storage permission needed on Android 10 and later). */
+    private suspend fun saveExport(current: BlueIrisClient, uri: String, name: String) {
+        val resolver = getApplication<Application>().contentResolver
+        val values = ContentValues().apply {
+            put(MediaStore.Downloads.DISPLAY_NAME, name)
+            put(MediaStore.Downloads.MIME_TYPE, "video/mp4")
+            put(MediaStore.Downloads.IS_PENDING, 1)
+        }
+        val target = resolver.insert(MediaStore.Downloads.EXTERNAL_CONTENT_URI, values)
+            ?: throw BlueIrisException("This phone would not let the app save to Downloads.")
+        try {
+            val out = resolver.openOutputStream(target) ?: throw BlueIrisException("This phone would not let the app save to Downloads.")
+            var lastPercent = -2
+            var lastAt = 0L
+            out.use { stream ->
+                current.downloadExport(uri, stream) { done, total ->
+                    val percent = if (total > 0) (done * 100 / total).toInt() else -1
+                    val at = SystemClock.elapsedRealtime()
+                    if (percent != lastPercent && at - lastAt > 250) {
+                        lastPercent = percent
+                        lastAt = at
+                        val megabytes = done / 1_000_000
+                        setDownload(DownloadState(if (percent >= 0) "Downloading… $percent% ($megabytes MB)" else "Downloading… $megabytes MB", percent.takeIf { it >= 0 }, name))
+                    }
+                }
+            }
+            values.clear()
+            values.put(MediaStore.Downloads.IS_PENDING, 0)
+            resolver.update(target, values, null, null)
+        } catch (e: Throwable) {
+            runCatching { resolver.delete(target, null, null) } // never leave half a file behind
+            throw e
+        }
+    }
+
     // ---- polling while the grid is on screen ----
 
     private var inForeground = true
@@ -718,6 +933,10 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         const val KEY_AI_LABELS = "ai_labels"
         const val KEY_MOTION_BOXES = "motion_boxes"
         const val KEY_SOUND_ON = "sound_on"
+        const val KEY_EXPORT_REENCODE = "export_reencode"
+        const val KEY_EXPORT_PROFILE = "export_profile"
+        const val KEY_EXPORT_AUDIO = "export_audio"
+        const val KEY_EXPORT_OVERLAY = "export_overlay"
         const val KEY_VOLUME = "sound_volume"
         const val KEY_MOTION_SENS = "motion_sensitivity"
         const val KEY_QUALITY = "video_quality"
