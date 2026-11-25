@@ -9,8 +9,8 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.RadioButton
@@ -34,6 +34,7 @@ import androidx.compose.ui.platform.LocalResources
 import com.feerlessleadr.sightline.data.LockAfter
 import com.feerlessleadr.sightline.data.ProbeVariant
 import com.feerlessleadr.sightline.data.VideoQuality
+import com.feerlessleadr.sightline.video.MotionSensitivity
 import com.feerlessleadr.sightline.video.StreamRequest
 import com.feerlessleadr.sightline.video.playerStreamRequest
 import kotlinx.coroutines.delay
@@ -49,7 +50,12 @@ fun SettingsScreen(
     session: SessionState,
     onBack: () -> Unit,
     onLiveVideo: (Boolean) -> Unit,
+    onHighlight: (Boolean) -> Unit,
+    onAiLabels: (Boolean) -> Unit,
+    onMotionBoxes: (Boolean) -> Unit,
+    onMotionSensitivity: (Int) -> Unit,
     onQuality: (VideoQuality) -> Unit,
+    onResetLayout: () -> Unit,
     onLockAfter: (LockAfter) -> Unit,
     onForgetSaved: () -> Unit,
     onProbe: suspend (camera: String, size: StreamRequest, variant: ProbeVariant) -> String,
@@ -76,6 +82,11 @@ fun SettingsScreen(
                 session.liveVideo,
                 onLiveVideo,
             )
+            SwitchRow("Highlight active cameras", "A border on tiles with motion (white) or a trigger (red, or the colour of what the AI saw)", session.highlight, onHighlight)
+            SwitchRow("AI labels on cameras", "Shows what the AI saw, like \"Person 91%\", while it is still happening", session.aiLabels, onAiLabels)
+            SwitchRow("Motion boxes", "Draws a box around movement it finds by comparing pictures (uses a little more data: stills refresh faster)", session.motionBoxes, onMotionBoxes)
+            ChoiceRow("Motion box sensitivity", "${session.motionSensitivity} of 10 · ${MotionSensitivity.describe(session.motionSensitivity)}") { dialog = "sensitivity" }
+            ActionRow("Reset layout for this view", "Back to Blue Iris's order, normal tiles and fit-to-screen size for the group shown", onResetLayout)
             Section("Video")
             ChoiceRow("Video quality", "${session.quality.label} · ${session.quality.note}") { dialog = "quality" }
             Section("Security")
@@ -144,6 +155,14 @@ fun SettingsScreen(
             onPick = { onQuality(it); dialog = null },
             onDismiss = { dialog = null },
         )
+        "sensitivity" -> ChoiceDialog(
+            title = "Motion box sensitivity",
+            options = (1..10).toList(),
+            selected = session.motionSensitivity,
+            label = { if (it == 5) "5 (balanced)" else it.toString() },
+            onPick = { onMotionSensitivity(it); dialog = null },
+            onDismiss = { dialog = null },
+        )
         "lock" -> ChoiceDialog(
             title = "Lock the app",
             options = LockAfter.entries,
@@ -199,6 +218,8 @@ private fun ActionRow(title: String, note: String?, onClick: () -> Unit) {
     HorizontalDivider()
 }
 
+/** A list of choices in a bottom sheet, like the web app's popups. Back or a tap outside closes it. */
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun <T> ChoiceDialog(
     title: String,
@@ -207,23 +228,21 @@ fun <T> ChoiceDialog(
     label: (T) -> String,
     onPick: (T) -> Unit,
     onDismiss: () -> Unit,
+    footer: (@Composable () -> Unit)? = null,
 ) {
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        title = { Text(title) },
-        text = {
-            Column {
-                options.forEach { option ->
-                    Row(
-                        Modifier.fillMaxWidth().clickable { onPick(option) },
-                        verticalAlignment = Alignment.CenterVertically,
-                    ) {
-                        RadioButton(selected = option == selected, onClick = { onPick(option) })
-                        Text(label(option), style = MaterialTheme.typography.bodyLarge)
-                    }
+    ModalBottomSheet(onDismissRequest = onDismiss, containerColor = Sl.Surface) {
+        Column(Modifier.padding(bottom = 16.dp)) {
+            Text(title, style = MaterialTheme.typography.titleMedium, modifier = Modifier.padding(horizontal = 20.dp, vertical = 8.dp))
+            options.forEach { option ->
+                Row(
+                    Modifier.fillMaxWidth().clickable { onPick(option) }.padding(horizontal = 12.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    RadioButton(selected = option == selected, onClick = { onPick(option) })
+                    Text(label(option), style = MaterialTheme.typography.bodyLarge)
                 }
             }
-        },
-        confirmButton = { TextButton(onClick = onDismiss) { Text("Close") } },
-    )
+            footer?.invoke()
+        }
+    }
 }

@@ -134,6 +134,36 @@ class BlueIrisClient(
         return CameraList.parse(reply.data)
     }
 
+    /** Alerts from the last [seconds] seconds on every camera (what the web app polls every 4 s for AI labels). */
+    suspend fun recentAlerts(seconds: Int = 120): List<RecentAlert> {
+        val now = System.currentTimeMillis() / 1000
+        val reply = call(
+            buildJsonObject {
+                put("cmd", "alertlist")
+                put("camera", "index")
+                put("startdate", now - seconds)
+                put("enddate", now + 60)
+                put("view", "alerts")
+            },
+        )
+        val array = reply.data as? kotlinx.serialization.json.JsonArray ?: return emptyList()
+        return array.mapNotNull { element ->
+            val o = element as? JsonObject ?: return@mapNotNull null
+            val camera = o["camera"]?.jsonPrimitive?.contentOrNull ?: return@mapNotNull null
+            RecentAlert(
+                camera = camera,
+                memo = o["memo"]?.jsonPrimitive?.contentOrNull.orEmpty(),
+                dateSeconds = o["date"]?.jsonPrimitive?.contentOrNull?.toDoubleOrNull()?.toLong() ?: 0L,
+                flags = o["flags"]?.jsonPrimitive?.contentOrNull?.toDoubleOrNull()?.toLong() ?: 0L,
+            )
+        }
+    }
+
+    /** Keeps the Blue Iris session from idling out (the web app does this every 40 s). */
+    suspend fun keepAlive() {
+        call(buildJsonObject { put("cmd", "status") })
+    }
+
     /**
      * A current JPEG still of [camera] (a camera short name, or a group). Uses the session cookie only,
      * so the token is never in the URL. [width] is clamped to a sane range.

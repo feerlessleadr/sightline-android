@@ -12,6 +12,7 @@ import com.feerlessleadr.sightline.data.CredentialStore
 import com.feerlessleadr.sightline.data.LockAfter
 import com.feerlessleadr.sightline.data.LockPolicy
 import com.feerlessleadr.sightline.data.LoginFailedException
+import com.feerlessleadr.sightline.data.RecentAlert
 import com.feerlessleadr.sightline.data.SavedSession
 import com.feerlessleadr.sightline.data.SessionStore
 import com.feerlessleadr.sightline.data.ProbeVariant
@@ -23,6 +24,7 @@ import com.feerlessleadr.sightline.data.SessionExpiredException
 import com.feerlessleadr.sightline.data.VideoStream
 import com.feerlessleadr.sightline.video.StreamRequest
 import javax.crypto.Cipher
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.update
@@ -44,8 +46,20 @@ data class SessionState(
     val selectedGroup: String? = null,
     /** Chosen tile size per group `optionValue`; groups not listed use [TileSize.Auto]. */
     val tileSizes: Map<String, TileSize> = emptyMap(),
+    /** Hand-made camera order and tile shapes per group `optionValue`. */
+    val arrangements: Map<String, GroupArrangement> = emptyMap(),
     /** Live video in the camera tiles (off = stills only). */
     val liveVideo: Boolean = true,
+    /** Coloured borders on tiles whose camera sees motion or is triggered. */
+    val highlight: Boolean = true,
+    /** What the AI saw ("Person 91%") on the tile while it is still happening. */
+    val aiLabels: Boolean = true,
+    /** Boxes drawn on tiles around movement the app finds by comparing pictures (off by default, like the web app). */
+    val motionBoxes: Boolean = false,
+    /** How sensitive the boxes are, 1 (only big movement) to 10 (almost any change); 5 is balanced. */
+    val motionSensitivity: Int = 5,
+    /** False while Blue Iris cannot be reached (a network blip); the grid shows a "Reconnecting" banner. */
+    val online: Boolean = true,
     /** Size of the one-camera video stream. */
     val quality: VideoQuality = VideoQuality.Auto,
     /** How long the app may be away before the fingerprint is needed again. */
@@ -102,6 +116,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     private var signingInAgain = false
 
     init {
+        startKeepAlive()
         if (neverModeNow()) {
             // "Never": no fingerprint. Pick the saved session up, or sign in by ourselves with the saved password.
             val saved = sessions.load()
@@ -150,6 +165,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
                 client = newClient
                 prefs.edit().putString(KEY_ADDRESS, address.trim()).putString(KEY_USER, username.trim()).apply()
                 val credentials = SavedCredentials(url.toString(), username.trim(), password)
+                memoryCredentials = if (remember) credentials else null
                 // With the "Never" lock choice there is no fingerprint to ask for: save the sign-in straight away.
                 val openSave = remember && lockAfterChoice() == LockAfter.Never
                 val savedOpen = openSave && store.saveOpen(credentials)
@@ -227,6 +243,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
             try {
                 val info = newClient.login(saved.user, saved.password)
                 client = newClient
+                memoryCredentials = saved
                 _state.update { UiState(form = FormState(it.form.address, it.form.username), session = newSession(info)) }
                 persistSession(saved.baseUrl)
                 loadCameras()
@@ -249,6 +266,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
 
     /** Delete the saved sign-in and its key (and any saved session). */
     fun forgetSaved() {
+        memoryCredentials = null
         store.clear()
         sessions.clear()
         _state.update { it.copy(locked = false, form = it.form.copy(error = null), session = it.session?.copy(savedSignIn = false)) }
@@ -264,12 +282,14 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
      */
     fun onBackgrounded(changingConfiguration: Boolean) {
         if (changingConfiguration) return
+        inForeground = false
         awaySince = System.currentTimeMillis()
         prefs.edit().putLong(KEY_LAST_STOP, awaySince).apply()
     }
 
     /** The app came back. If a sign-in is saved and the lock time has run out, lock it (the stream stops with it). */
     fun onForegrounded() {
+        inForeground = true
         val left = awaySince
         awaySince = 0L
         if (left == 0L || _state.value.session == null || !store.hasSaved) return
@@ -279,6 +299,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     private fun lockNow() {
         val old = client
         client = null
+        memoryCredentials = null
         sessions.clear()
         _state.update { UiState(form = it.form.copy(busy = false, error = null), locked = true) }
         if (old != null) viewModelScope.launch { old.logout() }
@@ -401,11 +422,58 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
                 null
             }
         }.toMap(),
+        arrangements = prefs.all.keys.filter { it.startsWith(KEY_ORDER) || it.startsWith(KEY_SHAPES) }
+            .map { it.removePrefix(KEY_ORDER).removePrefix(KEY_SHAPES) }.distinct()
+            .associateWith { group ->
+                GroupArrangement.decode(prefs.getString(KEY_ORDER + group, null), prefs.getString(KEY_SHAPES + group, null))
+            },
         liveVideo = prefs.getBoolean(KEY_LIVE_VIDEO, true),
+        highlight = prefs.getBoolean(KEY_HIGHLIGHT, true),
+        aiLabels = prefs.getBoolean(KEY_AI_LABELS, true),
+        motionBoxes = prefs.getBoolean(KEY_MOTION_BOXES, false),
+        motionSensitivity = prefs.getInt(KEY_MOTION_SENS, 5).coerceIn(1, 10),
         quality = VideoQuality.entries.firstOrNull { it.name == prefs.getString(KEY_QUALITY, null) } ?: VideoQuality.Auto,
         lockAfter = lockAfter,
         savedSignIn = store.hasSaved,
     )
+
+    fun setHighlight(on: Boolean) {
+        prefs.edit().putBoolean(KEY_HIGHLIGHT, on).apply()
+        _state.update { s -> s.session?.let { s.copy(session = it.copy(highlight = on)) } ?: s }
+    }
+
+    fun setMotionBoxes(on: Boolean) {
+        prefs.edit().putBoolean(KEY_MOTION_BOXES, on).apply()
+        _state.update { s -> s.session?.let { s.copy(session = it.copy(motionBoxes = on)) } ?: s }
+    }
+
+    fun setMotionSensitivity(level: Int) {
+        val value = level.coerceIn(1, 10)
+        prefs.edit().putInt(KEY_MOTION_SENS, value).apply()
+        _state.update { s -> s.session?.let { s.copy(session = it.copy(motionSensitivity = value)) } ?: s }
+    }
+
+    fun setAiLabels(on: Boolean) {
+        prefs.edit().putBoolean(KEY_AI_LABELS, on).apply()
+        _state.update { s -> s.session?.let { s.copy(session = it.copy(aiLabels = on)) } ?: s }
+    }
+
+    /** Saves the hand-made order and tile shapes of [group] on this device. */
+    fun setArrangement(group: String, value: GroupArrangement) {
+        prefs.edit().apply {
+            if (value.order.isEmpty()) remove(KEY_ORDER + group) else putString(KEY_ORDER + group, value.encodeOrder())
+            if (value.shapes.isEmpty()) remove(KEY_SHAPES + group) else putString(KEY_SHAPES + group, value.encodeShapes())
+        }.apply()
+        _state.update { s ->
+            s.session?.let { s.copy(session = it.copy(arrangements = if (value.isDefault) it.arrangements - group else it.arrangements + (group to value))) } ?: s
+        }
+    }
+
+    /** "Reset layout for this view": back to Blue Iris's order, normal tiles and fit-to-screen size. */
+    fun resetLayout(group: String) {
+        setArrangement(group, GroupArrangement())
+        setTileSize(group, TileSize.Auto)
+    }
 
     /** Remembers the tile size for [group] on this device. */
     fun setTileSize(group: String, size: TileSize) {
@@ -425,6 +493,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     fun signOut() {
         val old = client
         client = null
+        memoryCredentials = null
         sessions.clear()
         // Signing out with the "Never" lock choice means really signed out: forget the saved sign-in too, or the
         // app would just sign straight back in.
@@ -433,8 +502,55 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         if (old != null) viewModelScope.launch { old.logout() }
     }
 
-    /** The server ended the session: back to the lock screen if a sign-in is saved, else the form. */
+    /**
+     * The sign-in the app may use to sign back in by itself while it is open: the password is held in memory only,
+     * from a fingerprint unlock or a "Remember me" sign-in, never for a sign-in the owner did not ask to remember.
+     */
+    private var memoryCredentials: SavedCredentials? = null
+    private var reSigningIn = false
+
+    /** Quietly signs in again after Blue Iris ended the session (the web app's "stay signed in"); the grid just carries on. */
+    private fun silentReSignIn(creds: SavedCredentials, fallbackMessage: String?) {
+        if (reSigningIn) return
+        val url = (ServerAddress.parse(creds.baseUrl) as? AddressResult.Ok)?.url
+        if (url == null) {
+            hardEndSession(fallbackMessage)
+            return
+        }
+        reSigningIn = true
+        val old = client
+        viewModelScope.launch {
+            val fresh = BlueIrisClient(url)
+            try {
+                fresh.login(creds.user, creds.password)
+                if (client === old) {
+                    client = fresh
+                    persistSession(creds.baseUrl)
+                    _state.update { s -> s.session?.let { s.copy(session = it.copy(online = true)) } ?: s }
+                }
+            } catch (e: LoginFailedException) {
+                if (client === old) hardEndSession(fallbackMessage)
+            } catch (e: BlueIrisException) {
+                // Probably the network: the status poll tries again in a moment.
+                _state.update { s -> s.session?.let { s.copy(session = it.copy(online = false)) } ?: s }
+            } finally {
+                reSigningIn = false
+            }
+        }
+    }
+
+    /** The server ended the session: sign in again quietly if the password is at hand, else the lock screen or the form. */
     private fun endSession(message: String?) {
+        val creds = memoryCredentials ?: if (neverModeNow()) store.loadOpen() else null
+        if (creds != null && _state.value.session != null) {
+            silentReSignIn(creds, message)
+            return
+        }
+        hardEndSession(message)
+    }
+
+    private fun hardEndSession(message: String?) {
+        memoryCredentials = null
         client = null
         sessions.clear()
         if (neverModeNow()) {
@@ -478,6 +594,66 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         }
     }
 
+    // ---- polling while the grid is on screen ----
+
+    private var inForeground = true
+
+    /**
+     * Blue Iris's own motion and trigger state, from a fresh camera list (the web app asks every 2 s). A network
+     * failure only marks the connection as down (the grid shows "Reconnecting"); an ended session signs in again.
+     */
+    suspend fun pollStatus() {
+        val current = client ?: return
+        try {
+            val list = current.cameras()
+            _state.update { s ->
+                s.session?.let {
+                    if (it.cameras == list && it.online) s else s.copy(session = it.copy(cameras = list, online = true, loading = false))
+                } ?: s
+            }
+        } catch (e: SessionExpiredException) {
+            if (client === current) endSession(e.message)
+        } catch (e: BlueIrisException) {
+            _state.update { s -> s.session?.let { if (it.online) s.copy(session = it.copy(online = false)) else s } ?: s }
+        }
+    }
+
+    /** Alerts from the last two minutes (the web app asks every 4 s) for the AI labels; empty if they cannot be had. */
+    suspend fun recentAlerts(): List<RecentAlert> {
+        val current = client ?: return emptyList()
+        return try {
+            current.recentAlerts()
+        } catch (e: SessionExpiredException) {
+            if (client === current) endSession(e.message)
+            emptyList()
+        } catch (e: BlueIrisException) {
+            emptyList()
+        }
+    }
+
+    /** Sign in again now instead of waiting (the banner's "Sign in again"). */
+    fun signInAgainNow() {
+        hardEndSession("Please sign in again.")
+    }
+
+    private fun startKeepAlive() {
+        viewModelScope.launch {
+            while (true) {
+                delay(40_000)
+                val current = client
+                if (current != null && inForeground) {
+                    try {
+                        current.keepAlive()
+                    } catch (e: SessionExpiredException) {
+                        if (client === current) endSession(e.message)
+                    } catch (e: BlueIrisException) {
+                        // A network problem shows up on the grid's own polling.
+                    }
+                }
+            }
+        }
+    }
+
     private fun loadCameras() {
         val current = client ?: return
         _state.update { s -> s.session?.let { s.copy(session = it.copy(loading = true, error = null)) } ?: s }
@@ -497,7 +673,13 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         const val KEY_ADDRESS = "address"
         const val KEY_USER = "username"
         const val KEY_TILE_SIZE = "tile_size_"
+        const val KEY_ORDER = "tile_order_"
+        const val KEY_SHAPES = "tile_shapes_"
         const val KEY_LIVE_VIDEO = "live_video"
+        const val KEY_HIGHLIGHT = "highlight_active"
+        const val KEY_AI_LABELS = "ai_labels"
+        const val KEY_MOTION_BOXES = "motion_boxes"
+        const val KEY_MOTION_SENS = "motion_sensitivity"
         const val KEY_QUALITY = "video_quality"
         const val KEY_LOCK_AFTER = "lock_after"
         const val KEY_LAST_STOP = "last_stop_millis"

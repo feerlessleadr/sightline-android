@@ -3,6 +3,7 @@ package com.feerlessleadr.sightline
 import android.os.Bundle
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.setContent
+import androidx.activity.SystemBarStyle
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.viewModels
 import androidx.biometric.BiometricManager
@@ -34,7 +35,11 @@ class MainActivity : FragmentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        enableEdgeToEdge()
+        // Dark only, like the web app: light icons on the status and navigation bars.
+        enableEdgeToEdge(
+            statusBarStyle = SystemBarStyle.dark(android.graphics.Color.TRANSPARENT),
+            navigationBarStyle = SystemBarStyle.dark(android.graphics.Color.TRANSPARENT),
+        )
         // Coming back after the lock time (or always, by default) needs the fingerprint again.
         lifecycle.addObserver(
             LifecycleEventObserver { _, event ->
@@ -91,7 +96,12 @@ class MainActivity : FragmentActivity() {
                         session = session,
                         onBack = { showSettings = false },
                         onLiveVideo = viewModel::setLiveVideo,
+                        onHighlight = viewModel::setHighlight,
+                        onAiLabels = viewModel::setAiLabels,
+                        onMotionBoxes = viewModel::setMotionBoxes,
+                        onMotionSensitivity = viewModel::setMotionSensitivity,
                         onQuality = viewModel::setQuality,
+                        onResetLayout = { viewModel.resetLayout(session.selectedGroup ?: "index") },
                         onLockAfter = ::changeLock,
                         onForgetSaved = viewModel::forgetSaved,
                         onProbe = viewModel::probeVideo,
@@ -105,7 +115,13 @@ class MainActivity : FragmentActivity() {
                         openVideo = viewModel::openVideo,
                         onOpenCamera = { liveCamera = it.optionValue },
                         onTileSize = viewModel::setTileSize,
+                        onArrangement = viewModel::setArrangement,
+                        onResetLayout = viewModel::resetLayout,
                         onLiveVideo = viewModel::setLiveVideo,
+                        onMotionBoxes = viewModel::setMotionBoxes,
+                        onPollStatus = viewModel::pollStatus,
+                        onRecentAlerts = viewModel::recentAlerts,
+                        onSignInAgain = viewModel::signInAgainNow,
                         onSettings = { showSettings = true },
                     )
                     state.locked -> LockScreen(

@@ -14,13 +14,27 @@ import javax.microedition.khronos.egl.EGLConfig
 import javax.microedition.khronos.opengles.GL10
 import kotlin.math.min
 
+private const val SAMPLE_WIDTH = MotionDetector.SAMPLE_WIDTH
+private const val SAMPLE_MAX_HEIGHT = 512
+
 /**
  * One tile on screen: a box ([x], [y], [w], [h] in pixels from the view's top-left) that shows the part of the
  * decoded picture given by [src] (`[left, top, right, bottom]` as fractions 0..1 of the picture).
  * With [letterbox] the whole part is shown inside the box (portrait cameras); otherwise it fills the box,
  * trimming the edges.
  */
-class TileSpec(val x: Int, val y: Int, val w: Int, val h: Int, val src: FloatArray, val letterbox: Boolean = false)
+class TileSpec(
+    val x: Int,
+    val y: Int,
+    val w: Int,
+    val h: Int,
+    val src: FloatArray,
+    val letterbox: Boolean = false,
+    /** Names the tile in [GroupGlView.onSamples] (the camera id); empty = never sampled. */
+    val id: String = "",
+    /** Not drawn on screen, only sampled (a big tile showing its own stream still gets boxes from the shared picture). */
+    val sampleOnly: Boolean = false,
+)
 
 /**
  * Draws many tiles from ONE decoded video picture, which is how a whole Blue Iris group is shown with a single
@@ -41,6 +55,19 @@ class GroupGlView(context: Context) : GLSurfaceView(context) {
         renderer.onSurface = { surface -> main.post { onSurface?.invoke(surface) } }
     }
 
+    /** Called on the main thread with a small greyscale picture of each tile that has an id, after [requestSamples]. */
+    var onSamples: ((Map<String, GraySample>) -> Unit)? = null
+
+    init {
+        renderer.onSamples = { samples -> main.post { onSamples?.invoke(samples) } }
+    }
+
+    /** Asks for one greyscale sample of every identified tile on screen (used by the motion boxes). */
+    fun requestSamples() {
+        renderer.sampleRequested = true
+        requestRender()
+    }
+
     fun setTiles(tiles: List<TileSpec>) {
         renderer.tiles = tiles
         requestRender()
@@ -57,7 +84,11 @@ class GroupGlView(context: Context) : GLSurfaceView(context) {
         @Volatile var tiles: List<TileSpec> = emptyList()
         @Volatile var videoWidth = 0
         @Volatile var videoHeight = 0
+        @Volatile var sampleRequested = false
         var onSurface: ((Surface?) -> Unit)? = null
+        var onSamples: ((Map<String, GraySample>) -> Unit)? = null
+        private var fbo = 0
+        private var fboTexture = 0
 
         private var program = 0
         private var textureId = 0
@@ -77,6 +108,8 @@ class GroupGlView(context: Context) : GLSurfaceView(context) {
         }
 
         override fun onSurfaceCreated(gl: GL10?, config: EGLConfig?) {
+            fbo = 0 // GL objects belong to the old context
+            fboTexture = 0
             program = buildProgram()
             aPos = GLES20.glGetAttribLocation(program, "aPos")
             aUv = GLES20.glGetAttribLocation(program, "aUv")
@@ -134,15 +167,63 @@ class GroupGlView(context: Context) : GLSurfaceView(context) {
             GLES20.glEnableVertexAttribArray(aPos)
             GLES20.glEnableVertexAttribArray(aUv)
             for (tile in tiles) {
-                if (tile.w <= 0 || tile.h <= 0) continue
+                if (tile.w <= 0 || tile.h <= 0 || tile.sampleOnly) continue
                 if (tile.y + tile.h <= 0 || tile.y >= viewH || tile.x + tile.w <= 0 || tile.x >= viewW) continue
-                drawTile(tile)
+                drawTile(tile, viewH)
+            }
+            if (sampleRequested) {
+                sampleRequested = false
+                sampleTiles()
             }
             GLES20.glDisableVertexAttribArray(aPos)
             GLES20.glDisableVertexAttribArray(aUv)
         }
 
-        private fun drawTile(tile: TileSpec) {
+        /** Draws each identified tile again, small, into an off-screen picture and reads it back as greyscale. */
+        private fun sampleTiles() {
+            if (fbo == 0) {
+                val ids = IntArray(1)
+                GLES20.glGenTextures(1, ids, 0)
+                fboTexture = ids[0]
+                GLES20.glBindTexture(GLES20.GL_TEXTURE_2D, fboTexture)
+                GLES20.glTexImage2D(GLES20.GL_TEXTURE_2D, 0, GLES20.GL_RGBA, SAMPLE_WIDTH, SAMPLE_MAX_HEIGHT, 0, GLES20.GL_RGBA, GLES20.GL_UNSIGNED_BYTE, null)
+                GLES20.glTexParameteri(GLES20.GL_TEXTURE_2D, GLES20.GL_TEXTURE_MIN_FILTER, GLES20.GL_LINEAR)
+                GLES20.glTexParameteri(GLES20.GL_TEXTURE_2D, GLES20.GL_TEXTURE_MAG_FILTER, GLES20.GL_LINEAR)
+                GLES20.glGenFramebuffers(1, ids, 0)
+                fbo = ids[0]
+                GLES20.glBindFramebuffer(GLES20.GL_FRAMEBUFFER, fbo)
+                GLES20.glFramebufferTexture2D(GLES20.GL_FRAMEBUFFER, GLES20.GL_COLOR_ATTACHMENT0, GLES20.GL_TEXTURE_2D, fboTexture, 0)
+                // The picture texture must be the one bound for drawing again.
+                GLES20.glBindTexture(GLES11Ext.GL_TEXTURE_EXTERNAL_OES, textureId)
+            }
+            GLES20.glBindFramebuffer(GLES20.GL_FRAMEBUFFER, fbo)
+            val out = HashMap<String, GraySample>()
+            for (tile in tiles) {
+                if (tile.id.isEmpty() || tile.w <= 0 || tile.h <= 0) continue
+                if (tile.y + tile.h <= 0 || tile.y >= viewH || tile.x + tile.w <= 0 || tile.x >= viewW) continue
+                val sw = SAMPLE_WIDTH
+                val sh = (SAMPLE_WIDTH * tile.h / tile.w.toFloat()).toInt().coerceIn(8, SAMPLE_MAX_HEIGHT)
+                GLES20.glViewport(0, 0, sw, sh)
+                GLES20.glEnable(GLES20.GL_SCISSOR_TEST)
+                GLES20.glScissor(0, 0, sw, sh)
+                GLES20.glClearColor(0f, 0f, 0f, 1f)
+                GLES20.glClear(GLES20.GL_COLOR_BUFFER_BIT)
+                drawTile(TileSpec(0, 0, sw, sh, tile.src, tile.letterbox), sh)
+                val buffer = ByteBuffer.allocateDirect(sw * sh * 4)
+                GLES20.glReadPixels(0, 0, sw, sh, GLES20.GL_RGBA, GLES20.GL_UNSIGNED_BYTE, buffer)
+                val raw = ByteArray(sw * sh * 4)
+                buffer.get(raw)
+                // GL rows run bottom-up; the detector wants the top row first.
+                val flipped = ByteArray(raw.size)
+                for (row in 0 until sh) System.arraycopy(raw, (sh - 1 - row) * sw * 4, flipped, row * sw * 4, sw * 4)
+                out[tile.id] = grayOf(flipped, sw, sh)
+            }
+            GLES20.glBindFramebuffer(GLES20.GL_FRAMEBUFFER, 0)
+            GLES20.glDisable(GLES20.GL_SCISSOR_TEST)
+            if (out.isNotEmpty()) onSamples?.invoke(out)
+        }
+
+        private fun drawTile(tile: TileSpec, targetHeight: Int) {
             var l = tile.src[0]
             var t = tile.src[1]
             var r = tile.src[2]
@@ -180,7 +261,7 @@ class GroupGlView(context: Context) : GLSurfaceView(context) {
                 }
             }
             // GL's origin is the bottom-left; the picture fractions are measured from the top.
-            val glY = viewH - dy - dh
+            val glY = targetHeight - dy - dh
             GLES20.glEnable(GLES20.GL_SCISSOR_TEST)
             GLES20.glScissor(maxOf(0, dx), maxOf(0, glY), dw, dh)
             GLES20.glViewport(dx, glY, dw, dh)

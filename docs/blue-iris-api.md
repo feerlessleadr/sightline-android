@@ -96,3 +96,10 @@ This is why MediaCodec is the leading decoder choice: parse these blocks, feed a
 - The first video block is already a key frame (NAL types 7, 8, 6, 6, 6, 5: SPS, PPS, SEI, IDR), payloads are Annex-B. Later blocks are SEI + one slice (type 1). So there is no wait for a key frame; slowness at start comes from the server and the connection.
 - A group stream sends `X-CamList` (11 quoted names) and `X-Reclist` (11 `[l,t,r,b]` boxes) headers (note the real spelling `X-Reclist`; HTTP header names are case-insensitive). The boxes are in the stream's own pixels (1280x720 when asked for 1280x720) even though the camera list describes the group as 2560 x 1080, so the header layout must be used with the stream's own size.
 - With these settings the sample camera ran at about 5 frames per second at night.
+
+## Read from the web app's source (2026-11-25): live status and AI labels
+- **Motion/trigger state**: `camlist` again every 2 s (`isMotion`, `isTriggered`, `isAlerting` per camera).
+- **Recent AI results**: `alertlist` with `camera:"index"`, `startdate` = now-120 s, `enddate` = now+60 s, `view:"alerts"` every 4 s. Per camera the newest alert with a non-motion tag wins.
+- **Alert `flags` bits** (from the web source, not yet confirmed on this server): bit 1 flagged, bit 23 cancelled, bit 26 person, bit 27 vehicle, bit 31 wildlife. Bit 31 is beyond a 32-bit int; use 64-bit numbers.
+- **Keepalive**: `status` every 40 s while the app is open.
+- **ONVIF event names** saved as the alert label are shortened by Blue Iris; the web matches them by how they start (`PeopleDet` -> Person, `VehicleDet` -> Vehicle, `AnimalDet`, `FaceDet`, `Visitor`/`Doorbell`, `Intrusion`, `LineDet`/`TripWire`, `CellMotion`, `AlarmIn`).

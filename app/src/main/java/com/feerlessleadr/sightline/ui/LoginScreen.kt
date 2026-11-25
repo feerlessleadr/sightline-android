@@ -47,15 +47,11 @@ fun LoginScreen(
             .fillMaxSize()
             .safeDrawingPadding()
             .verticalScroll(rememberScrollState())
-            .padding(24.dp),
+            .padding(20.dp),
         verticalArrangement = Arrangement.Center,
     ) {
-        Text("Sightline", style = MaterialTheme.typography.headlineLarge)
-        Text(
-            "Sign in to your Blue Iris server. Only https:// addresses work.",
-            style = MaterialTheme.typography.bodyMedium,
-            modifier = Modifier.padding(top = 4.dp, bottom = 24.dp),
-        )
+      Card(Modifier.fillMaxWidth()) {
+        BrandBlock("Sign in to your Blue Iris server. Only https:// addresses work.")
         OutlinedTextField(
             value = address,
             onValueChange = { address = it },
@@ -118,5 +114,6 @@ fun LoginScreen(
         ) {
             if (form.busy) CircularProgressIndicator(Modifier.height(20.dp)) else Text("Sign in")
         }
+      }
     }
 }
