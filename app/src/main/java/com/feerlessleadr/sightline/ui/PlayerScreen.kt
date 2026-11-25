@@ -79,6 +79,15 @@ import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.rememberUpdatedState
 import com.feerlessleadr.sightline.video.GroupLayout
+import androidx.compose.ui.unit.IntSize
+import com.feerlessleadr.sightline.video.GridCell
+import com.feerlessleadr.sightline.video.GroupGrid
+import com.feerlessleadr.sightline.video.TileSpec
+import com.feerlessleadr.sightline.video.GroupGlView
+import androidx.lifecycle.LifecycleEventObserver
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.compose.LocalLifecycleOwner
+import androidx.compose.ui.platform.LocalContext
 import com.feerlessleadr.sightline.video.MotionDetector
 import com.feerlessleadr.sightline.video.MuLawPlayer
 import androidx.compose.runtime.LaunchedEffect
@@ -230,6 +239,36 @@ fun PlayerScreen(
     var fullScreen by remember { mutableStateOf(false) }
     // Group view: where each camera sits in the combined picture (from the stream's headers), for tapping one.
     var groupLayout by remember(id) { mutableStateOf<GroupLayout?>(null) }
+    // Group view without the cameras the app hides: Blue Iris's picture holds every camera of the group, so when some are
+    // hidden or disabled the shown ones are cut out of it and drawn in a grid of their own (the web app's way).
+    val context = LocalContext.current
+    val groupShown = if (camera.isGroup) camera.group.orEmpty().filter { findCamera(it) != null } else emptyList()
+    val useGrid = camera.isGroup && groupShown.isNotEmpty() && groupShown.size < camera.group.orEmpty().size
+    val glView = remember(useGrid) { if (useGrid) GroupGlView(context) else null }
+    val lifecycleOwner = LocalLifecycleOwner.current
+    DisposableEffect(glView, lifecycleOwner) {
+        if (glView == null) return@DisposableEffect onDispose { }
+        glView.onSurface = { surface = it }
+        val observer = LifecycleEventObserver { _, event ->
+            when (event) {
+                Lifecycle.Event.ON_START -> glView.onResume()
+                Lifecycle.Event.ON_STOP -> {
+                    surface = null // stops the stream; a new surface comes with the next start
+                    glView.onPause()
+                }
+                else -> Unit
+            }
+        }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        if (lifecycleOwner.lifecycle.currentState.isAtLeast(Lifecycle.State.STARTED)) glView.onResume()
+        onDispose {
+            lifecycleOwner.lifecycle.removeObserver(observer)
+            glView.onSurface = null
+            glView.onPause()
+            glView.release()
+            surface = null
+        }
+    }
     var stageW by remember { mutableFloatStateOf(0f) }
     var stageH by remember { mutableFloatStateOf(0f) }
     LaunchedEffect(id) {
@@ -395,6 +434,7 @@ fun PlayerScreen(
                 onSize = { w, h ->
                     if (streamGeneration[0] == mine) {
                         aspect = w.toFloat() / h.toFloat()
+                        glView?.setVideoSize(w, h)
                         if (camera.isGroup) groupLayout = groupLayoutFor(camera, stream, w, h, isLive)
                     }
                 },
@@ -545,8 +585,28 @@ fun PlayerScreen(
     }
     // One tap on the picture: floating controls show or hide; otherwise a live camera closes back to where it was
     // opened and a recording pauses or resumes (like UI3 and the web app).
+    // The cells of the grid that replaces Blue Iris's group picture (only when the app hides some of the group's cameras).
+    val gridLayout = groupLayout ?: (if (live) listLayoutOf(camera) else null)
+    val gridCells: List<GridCell> = remember(useGrid, gridLayout, groupShown, stageW, stageH, aspect) {
+        when {
+            !useGrid || stageW <= 0f || stageH <= 0f -> emptyList()
+            gridLayout != null -> GroupGrid.cells(gridLayout, groupShown, stageW, stageH)
+            else -> {
+                // No layout known (a recording): Blue Iris's whole picture as it is, fitted in the stage.
+                val fit = ZoomMath.fit(stageW, stageH, aspect, false)
+                listOf(GridCell("", fit[0], fit[1], fit[2], fit[3], floatArrayOf(0f, 0f, 1f, 1f)))
+            }
+        }
+    }
     // A tap in group view: show the camera that was tapped, at the same moment (live stays live, a recording keeps its time).
     fun jumpToCameraAt(at: Offset) {
+        if (useGrid) {
+            val qx = (at.x - panX) / zoom
+            val qy = (at.y - panY) / zoom
+            val name = gridCells.firstOrNull { it.camera.isNotEmpty() && it.contains(qx, qy) }?.camera ?: return
+            findCamera(name)?.let { onSwitchCamera(it) }
+            return
+        }
         val layout = groupLayout ?: return
         val fit = ZoomMath.fit(stageW, stageH, aspect, fill)
         if (zoom <= 0f || fit[2] <= 0f || fit[3] <= 0f) return
@@ -684,7 +744,7 @@ fun PlayerScreen(
     }
 
     // Parts that appear in more than one layout.
-    val title = if (camera.isGroup) "${camera.displayName} · ${camera.group?.size ?: 0}" else camera.displayName
+    val title = if (camera.isGroup) "${camera.displayName} · ${if (useGrid) groupShown.size else (camera.group?.size ?: 0)}" else camera.displayName
     val soundButton: @Composable () -> Unit = {
         Box {
             IconAction(if (soundOn && volume > 0f) Glyph.Sound else Glyph.Muted, "Volume") { showVolume = true }
@@ -736,7 +796,7 @@ fun PlayerScreen(
     val stage: @Composable (Modifier) -> Unit = { modifier ->
         Box(
             modifier
-                .background(Color.Black)
+                .background(if (useGrid) Color.Transparent else Color.Black) // the grid's video view sits behind the window
                 .clipToBounds()
                 .onSizeChanged { stageW = it.width.toFloat(); stageH = it.height.toFloat() }
                 .pointerInput(Unit) {
@@ -798,7 +858,7 @@ fun PlayerScreen(
                                     } else {
                                         // The point under the fingers stays under them; the picture never leaves the stage.
                                         val k = next / zoom
-                                        val fit = ZoomMath.fit(w, h, aspect, fill)
+                                        val fit = if (useGrid) floatArrayOf(0f, 0f, w, h) else ZoomMath.fit(w, h, aspect, fill)
                                         panX = ZoomMath.clampAxis(fit[0], fit[2], w, next, centre.x - (centre.x - panX) * k + pan.x)
                                         panY = ZoomMath.clampAxis(fit[1], fit[3], h, next, centre.y - (centre.y - panY) * k + pan.y)
                                         zoom = next
@@ -831,9 +891,18 @@ fun PlayerScreen(
                     }
                 },
         ) {
-            // The video view fills the stage; a matrix inside it fits the picture and applies the zoom, so the
-            // video is never scaled by the layout system (which made it go black).
-            AndroidView(
+            // A group with hidden cameras: the shown cameras are cut out of the group picture by the GL view, drawn in a grid
+            // that follows the zoom, panning and swiping (the stage is the "picture" then).
+            if (useGrid && glView != null) {
+                AndroidView(factory = { glView }, modifier = Modifier.fillMaxSize())
+                val specs = gridCells.map { c ->
+                    TileSpec(
+                        (c.x * zoom + panX + swipeOffset).roundToInt(), (c.y * zoom + panY).roundToInt(),
+                        (c.w * zoom).roundToInt(), (c.h * zoom).roundToInt(), c.src,
+                    )
+                }
+                SideEffect { glView.setTiles(specs) }
+            } else AndroidView(
                 modifier = Modifier.fillMaxSize(),
                 factory = { context ->
                     TextureView(context).also { tv ->
@@ -872,10 +941,30 @@ fun PlayerScreen(
             )
             // Covers the video only while no video frame is showing (a paused recording, or the start of a stream).
             if (!streaming) {
-                still?.let {
+                still?.let { picture ->
                     Box(Modifier.fillMaxSize().background(Color.Black)) // hides the picture that was there before
-                    Image(
-                        it, contentDescription = null, contentScale = if (fill) ContentScale.Crop else ContentScale.Fit,
+                    if (useGrid) {
+                        // Cut the shown cameras out of the still, as the video is.
+                        Canvas(Modifier.fillMaxSize()) {
+                            withTransform({
+                                translate(panX + swipeOffset, panY)
+                                scale(zoom, zoom, pivot = Offset.Zero)
+                            }) {
+                                val sw = picture.width
+                                val sh = picture.height
+                                for (c in gridCells) {
+                                    drawImage(
+                                        picture,
+                                        srcOffset = IntOffset((c.src[0] * sw).roundToInt(), (c.src[1] * sh).roundToInt()),
+                                        srcSize = IntSize(((c.src[2] - c.src[0]) * sw).roundToInt().coerceAtLeast(1), ((c.src[3] - c.src[1]) * sh).roundToInt().coerceAtLeast(1)),
+                                        dstOffset = IntOffset(c.x.roundToInt(), c.y.roundToInt()),
+                                        dstSize = IntSize(c.w.roundToInt().coerceAtLeast(1), c.h.roundToInt().coerceAtLeast(1)),
+                                    )
+                                }
+                            }
+                        }
+                    } else Image(
+                        picture, contentDescription = null, contentScale = if (fill) ContentScale.Crop else ContentScale.Fit,
                         modifier = Modifier.fillMaxSize().graphicsLayer {
                             scaleX = zoom
                             scaleY = zoom
@@ -928,7 +1017,7 @@ fun PlayerScreen(
                 }
             }
             // Boxes around movement, drawn in the picture's place so they follow zoom and panning.
-            if (motionBoxes && swipeOffset == 0f) {
+            if (motionBoxes && !useGrid && swipeOffset == 0f) {
                 Canvas(Modifier.fillMaxSize()) {
                     boxTick.longValue // read here so only this drawing is redone as boxes appear and fade
                     val now = SystemClock.uptimeMillis()
@@ -1143,7 +1232,7 @@ fun PlayerScreen(
     }
 
     if (overlay) {
-        Box(Modifier.fillMaxSize().background(Color.Black)) {
+        Box(Modifier.fillMaxSize().background(if (useGrid) Color.Transparent else Color.Black)) {
             stage(Modifier.fillMaxSize())
             AnimatedVisibility(
                 visible = controlsVisible,
@@ -1283,4 +1372,13 @@ private fun groupLayoutFor(group: Camera, stream: VideoStream, width: Int, heigh
     val sameOrder = fromHeaders != null && fromList != null &&
         fromHeaders.cams.map { it.lowercase() } == fromList.cams.map { it.lowercase() }
     return if (sameOrder) fromHeaders else null
+}
+
+/** The camera list's own layout of a group (names and boxes in the group's picture size), if it has one. */
+private fun listLayoutOf(group: Camera): GroupLayout? {
+    val names = group.group
+    val rects = group.rects
+    val w = group.width ?: 0
+    val h = group.height ?: 0
+    return if (names != null && rects != null && names.size == rects.size && w > 0 && h > 0) GroupLayout(names, rects, w, h) else null
 }
