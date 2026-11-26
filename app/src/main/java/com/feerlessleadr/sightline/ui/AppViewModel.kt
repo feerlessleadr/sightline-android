@@ -1076,6 +1076,21 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         }
     }
 
+    /** Blue Iris's system log for the log screen. Null if the session ended. */
+    suspend fun loadLog(): com.feerlessleadr.sightline.data.LogResult? {
+        val current = client ?: return null
+        return try {
+            com.feerlessleadr.sightline.data.LogResult.Ok(current.systemLog())
+        } catch (e: SessionExpiredException) {
+            if (client === current) endSession(e.message)
+            null
+        } catch (e: com.feerlessleadr.sightline.data.AccessDeniedException) {
+            com.feerlessleadr.sightline.data.LogResult.Denied(e.message.orEmpty())
+        } catch (e: BlueIrisException) {
+            com.feerlessleadr.sightline.data.LogResult.Failed(e.message.orEmpty())
+        }
+    }
+
     /** Blue Iris's status and its cameras, for the Server status screen; null if they cannot be had right now. */
     suspend fun serverView(): Pair<com.feerlessleadr.sightline.data.ServerStatus, List<com.feerlessleadr.sightline.data.Camera>>? {
         val current = client ?: return null

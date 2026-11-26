@@ -270,6 +270,9 @@ class BlueIrisClient(
     /** Blue Iris's status: CPU, memory, disks, uptime and so on (Server status screen). */
     suspend fun serverStatus(): ServerStatus = ServerStatus.parse(call(buildJsonObject { put("cmd", "status") }).data)
 
+    /** Blue Iris's own system log (`log`); only admin users may read it, others get an AccessDeniedException. */
+    suspend fun systemLog(): List<LogEntry> = SystemLog.parse(call(buildJsonObject { put("cmd", "log") }).data)
+
     /** Keeps the Blue Iris session from idling out (the web app does this every 40 s). */
     suspend fun keepAlive() {
         call(buildJsonObject { put("cmd", "status") })

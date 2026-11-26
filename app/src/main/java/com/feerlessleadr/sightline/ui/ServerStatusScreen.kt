@@ -1,6 +1,7 @@
 package com.feerlessleadr.sightline.ui
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -56,6 +57,7 @@ fun ServerStatusScreen(
     serverName: String?,
     version: String?,
     load: suspend () -> Pair<ServerStatus, List<Camera>>?,
+    onOpenLog: () -> Unit,
     onBack: () -> Unit,
 ) {
     var status by remember { mutableStateOf<ServerStatus?>(null) }
@@ -135,7 +137,7 @@ fun ServerStatusScreen(
                     null,
                 ),
                 Tile("Connections", s.connections?.toString() ?: "?", "To the web server", null),
-                Tile("Warnings", s.warnings.toString(), if (s.warnings > 0) "See the system log in Blue Iris" else "Nothing new", null, warn = s.warnings > 0),
+                Tile("Warnings", s.warnings.toString(), if (s.warnings > 0) "Open the system log" else "Nothing new", null, warn = s.warnings > 0, onClick = onOpenLog),
                 Tile(
                     "Profile",
                     s.profile ?: "?",
@@ -183,11 +185,11 @@ fun ServerStatusScreen(
     }
 }
 
-private class Tile(val key: String, val value: String, val sub: String, val bar: Double?, val warn: Boolean = false)
+private class Tile(val key: String, val value: String, val sub: String, val bar: Double?, val warn: Boolean = false, val onClick: (() -> Unit)? = null)
 
 @Composable
 private fun TileCard(t: Tile, modifier: Modifier) {
-    Column(modifier.clip(RoundedCornerShape(12.dp)).background(Sl.Surface2).padding(12.dp)) {
+    Column(modifier.clip(RoundedCornerShape(12.dp)).background(Sl.Surface2).then(if (t.onClick != null) Modifier.clickable(onClick = t.onClick) else Modifier).padding(12.dp)) {
         Text(t.key, color = Sl.Muted, style = MaterialTheme.typography.labelMedium)
         Text(t.value, color = if (t.warn) Sl.Live else Sl.Text, fontSize = 24.sp, fontWeight = FontWeight.SemiBold)
         if (t.sub.isNotEmpty()) Text(t.sub, color = Sl.Muted, style = MaterialTheme.typography.bodySmall)

@@ -121,12 +121,15 @@ class MainActivity : FragmentActivity() {
                 }
                 var showSettings by rememberSaveable { mutableStateOf(false) }
                 var showServer by rememberSaveable { mutableStateOf(false) }
+                var showLog by rememberSaveable { mutableStateOf(false) }
+                var logProblems by rememberSaveable { mutableStateOf(false) }
                 // Leaving the signed-in state (sign-out, lock, expired session) also leaves these screens.
                 LaunchedEffect(session == null) {
                     if (session == null) {
                         liveCamera = null
                         showSettings = false
                         showServer = false
+                        showLog = false
                     }
                 }
                 // The player shows a camera, or a whole group (which Blue Iris offers as one combined picture).
@@ -140,6 +143,7 @@ class MainActivity : FragmentActivity() {
                     // The link is cleared only at the end: clearing it restarts this effect, which would cancel the alert lookup.
                     showSettings = false
                     showServer = false
+                    showLog = false
                     groupFrom = null
                     val cams = session.cameras?.cameras.orEmpty()
                     fun find(name: String) = cams.firstOrNull { it.optionValue.equals(name, ignoreCase = true) && it.isEnabled }
@@ -171,6 +175,7 @@ class MainActivity : FragmentActivity() {
                 BackHandler(enabled = live != null) { liveCamera = null }
                 BackHandler(enabled = live == null && showSettings) { showSettings = false }
                 BackHandler(enabled = live == null && showServer) { showServer = false }
+                BackHandler(enabled = live == null && showLog) { showLog = false }
 
                 when {
                     // Keyed so that a link to another alert on the same camera starts the player afresh.
@@ -207,10 +212,16 @@ class MainActivity : FragmentActivity() {
                         onBack = { liveCamera = null; alertToPlay = null },
                         initialAlert = alertToPlay,
                     ) }
+                    session != null && showLog -> com.feerlessleadr.sightline.ui.LogScreen(
+                        firstFilter = if (logProblems) com.feerlessleadr.sightline.data.LogFilter.Problems else com.feerlessleadr.sightline.data.LogFilter.All,
+                        load = viewModel::loadLog,
+                        onBack = { showLog = false },
+                    )
                     session != null && showServer -> com.feerlessleadr.sightline.ui.ServerStatusScreen(
                         serverName = session.info.systemName,
                         version = session.info.version,
                         load = viewModel::serverView,
+                        onOpenLog = { logProblems = true; showLog = true },
                         onBack = { showServer = false },
                     )
                     session != null && showSettings -> SettingsScreen(
@@ -232,6 +243,7 @@ class MainActivity : FragmentActivity() {
                         onProbe = viewModel::probeVideo,
                         onSignOut = viewModel::signOut,
                         onServerStatus = { showServer = true },
+                        onSystemLog = { logProblems = false; showLog = true },
                     )
                     session != null -> CameraListScreen(
                         session = session,
