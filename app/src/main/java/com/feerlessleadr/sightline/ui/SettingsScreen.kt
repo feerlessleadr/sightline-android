@@ -66,6 +66,7 @@ fun SettingsScreen(
     onSignOut: () -> Unit,
     onServerStatus: () -> Unit,
     onSystemLog: () -> Unit,
+    onActivity: () -> Unit,
 ) {
     var dialog by remember { mutableStateOf<String?>(null) }
     val probeLines = remember { mutableStateListOf<String>() }
@@ -136,6 +137,7 @@ fun SettingsScreen(
             Section("Server")
             ActionRow("Server status", "CPU, memory, recording space, frame rates and disks of your Blue Iris server", onServerStatus)
             ActionRow("System log", "Blue Iris's own log: warnings, errors and what it has been doing (needs an admin user)", onSystemLog)
+            ActionRow("Activity", "When and where alerts happen: per day and by hour of the day", onActivity)
             Section("Account")
             ActionRow("Sign out", null, onSignOut)
             Section("Developer")

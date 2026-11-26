@@ -99,7 +99,7 @@ Status: **Done**, **Partial**, **Planned (Mn)**, **N/A** (with the reason). "And
 | Disk usage per disk (recordings, allocated free, other, free) with over-allocation note | Built (M5) |
 | Per-camera frame rate, bitrate, "footage kept" (long timeline request, at most every 10 min) | Frame rate and bitrate built (M5); footage kept still to do |
 | System log: newest first, level icons, repeat counts, filters (All / Warnings & errors / Info), search; clear message for non-admin users | Built (M5): Settings > System log and the Warnings tile; coloured glyph dots instead of drawn icons; real lines unverified (needs an admin user) |
-| Activity overview: alerts per day for 7/14/30 days stacked by type, camera x hour heat map, People/Vehicles/Animals filters, tap a camera, 4 requests at a time, kept 10 min | Planned (M5) |
+| Activity overview: alerts per day for 7/14/30 days stacked by type, camera x hour heat map, People/Vehicles/Animals filters, tap a camera, 4 requests at a time, kept 10 min | Built (M5): Settings > Activity; busy days of 100+ alerts are read in full |
 | Stay signed in through Blue Iris session timeouts | Android: fingerprint/PIN unlock with saved password (done); auto re-sign-in after a session timeout while the app is open (done, M2 round 2: the password stays in memory only after an unlock or a Remember me sign-in) |
 | About: Sightline and Blue Iris versions, links (project, releases, issues), Copy diagnostics (no names, addresses or passwords), licence note, credits | Planned (M5/M6) |
 

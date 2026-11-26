@@ -358,6 +358,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         client = null
         alerts.clear()
         alertFilters.clear()
+        activity.clear()
         memoryCredentials = null
         downloadJob?.cancel()
         sessions.clear()
@@ -493,6 +494,15 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     } catch (e: BlueIrisException) {
         null
     }
+
+    /** The Activity screen's alert counts. */
+    val activity = com.feerlessleadr.sightline.data.ActivityFeed(
+        scope = viewModelScope,
+        fetch = { camera, startSec, endSec -> guarded { it.cameraAlerts(camera, startSec * 1000, endSec * 1000) } },
+        shown = { name ->
+            _state.value.session?.cameras?.cameras?.any { it.optionValue.equals(name, ignoreCase = true) && it.isEnabled && !it.hidden } ?: true
+        },
+    )
 
     /** Which filter buttons the Alerts tab shows, kept on the phone. */
     val alertFilters = AlertFilterSettings(
@@ -653,6 +663,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         client = null
         alerts.clear()
         alertFilters.clear()
+        activity.clear()
         memoryCredentials = null
         downloadJob?.cancel() // a download does not go on after signing out
         sessions.clear()
@@ -715,6 +726,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         client = null
         alerts.clear()
         alertFilters.clear()
+        activity.clear()
         sessions.clear()
         if (neverModeNow()) {
             // "Never" lock: just sign in again with the saved password.
