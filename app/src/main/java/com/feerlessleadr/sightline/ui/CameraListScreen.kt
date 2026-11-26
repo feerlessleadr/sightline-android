@@ -9,7 +9,9 @@ import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.LazyRow
+import com.feerlessleadr.sightline.data.AlertsUi
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.material3.MaterialTheme
@@ -65,8 +67,12 @@ fun CameraListScreen(
     onRecentAlerts: suspend () -> List<RecentAlert>,
     onSignInAgain: () -> Unit,
     onSettings: () -> Unit,
+    tab: HomeTab,
+    onTab: (HomeTab) -> Unit,
+    alerts: AlertsUi,
+    alertsListState: LazyListState,
+    alertsActions: AlertsActions,
 ) {
-    var tab by rememberSaveable { mutableStateOf(HomeTab.Live) }
     var fullScreen by rememberSaveable { mutableStateOf(false) }
     BackHandler(enabled = fullScreen) { fullScreen = false }
     SystemBarsHidden(fullScreen && tab == HomeTab.Live)
@@ -75,19 +81,23 @@ fun CameraListScreen(
         if (!fullScreen) {
             SightlineHeader(
                 serverName = session.info.systemName ?: "Blue Iris",
-                onFullScreen = { tab = HomeTab.Live; fullScreen = true },
+                onFullScreen = { onTab(HomeTab.Live); fullScreen = true },
                 onMenu = onSettings,
             )
         }
         Box(Modifier.weight(1f)) {
             when (tab) {
                 HomeTab.Live -> LiveTab(session, onSelectGroup, onRefresh, loadStill, openVideo, onOpenCamera, onTileSize, onArrangement, onResetLayout, onLiveVideo, onMotionBoxes, onPollStatus, onRecentAlerts, onSignInAgain, fullScreen)
-                HomeTab.Alerts -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                    Text("Alerts are not built yet. They arrive in a later version.", color = Sl.Muted, modifier = Modifier.padding(24.dp))
-                }
+                HomeTab.Alerts -> AlertsTab(
+                    ui = alerts,
+                    groups = session.cameras?.groups.orEmpty(),
+                    cameras = session.cameras?.visibleCameras(null).orEmpty(),
+                    listState = alertsListState,
+                    actions = alertsActions,
+                )
             }
         }
-        if (!fullScreen) SightlineTabBar(tab) { tab = it }
+        if (!fullScreen) SightlineTabBar(tab) { onTab(it) }
     }
 }
 

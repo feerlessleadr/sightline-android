@@ -72,22 +72,22 @@ Status: **Done**, **Partial**, **Planned (Mn)**, **N/A** (with the reason). "And
 | Keeps the screen awake while the player is open (wake lock, found in the source only) | Done (M3 stage 1) |
 | Short haptic buzz on long-press actions (found in the source only) | Done (M2 round 2) |
 | Troubleshooting switches `?grpdebug=1` (outline each camera on the group picture) and `?cliprewind=0/1` (force clip-list rewinding) | Planned (M6): hidden developer options |
-| Flag / protect an alert (`update` command), flags shown, "Flagged" filter; clear message without permission | Player done (M3: chip and sheet); list icons and Flagged filter with the alerts tab (M4) |
+| Flag / protect an alert (`update` command), flags shown, "Flagged" filter; clear message without permission | Player done (M3: chip and sheet); list icons and the Flagged filter done in the alerts tab (M4 slice 1) |
 | Download alert or any range as MP4 (export): re-encode H.264 (default) or original, encoder profile 0 to 3, overlay, audio, choose start/end by draggable handles or set-at-playhead, up to 2 h, size estimate, progress, cancel, readable file name, permission message | Done (M3): whole alert, options, progress, cancel, saved to Downloads, and a range chosen on the timeline (set start/end at the playhead, shaded band, up to 2 h, size estimate); handle dragging not done (the buttons set the ends); list entry with the alerts tab (M4) |
 | Link to open full Blue Iris UI (UI3) | Planned (M5): opens in the browser |
 
 ## Alerts
 | Web feature | Status |
 |---|---|
-| Alert list with thumbnails, labels, camera, time; tap to play from the moment | Planned (M4) |
-| Filter buttons: All, People, Vehicles, Animals, Flagged, and any custom label; capitalisation and plurals ignored; People / Vehicles use the AI flag or the label | Planned (M4) |
-| Combine filters (long-press adds), All clears | Planned (M4) |
-| Choose mode (hand-picked) vs Auto mode (always-show pins, then top labels from a 3-week scan, fit-to-screen up to 5 or 1 to 8); counts refreshed every few hours; new users start on Choose with All, People, Vehicles, Animals; one-time tip | Planned (M4) |
-| Labels picker from real data (3-week scan with counts) plus typed labels | Planned (M4) |
-| Date and time ranges: last hour, today, yesterday, last night (8 PM to 6 AM), custom window | Planned (M4) |
-| Filter by camera or group | Planned (M4) |
-| Flag/protect icons in the list and long-press menu | Planned (M4) |
-| Retry once on "could not load alerts" with Blue Iris's reason; scan sends one request at a time | Planned (M4) |
+| Alert list with thumbnails, labels, camera, time; tap to play from the moment | Built (M4 slice 1): thumbnails, tags, camera, time, duration, flag and lock icons, day headings, loads older alerts as you scroll; tap plays it from the alert |
+| Filter buttons: All, People, Vehicles, Animals, Flagged, and any custom label; capitalisation and plurals ignored; People / Vehicles use the AI flag or the label | Built for All, People, Vehicles, Animals, Flagged (M4 slice 1); custom labels in slice 2 |
+| Combine filters (long-press adds), All clears | Built (M4 slice 1): long-press a button to add it to the others, All clears |
+| Choose mode (hand-picked) vs Auto mode (always-show pins, then top labels from a 3-week scan, fit-to-screen up to 5 or 1 to 8); counts refreshed every few hours; new users start on Choose with All, People, Vehicles, Animals; one-time tip | Planned (M4 slice 2) |
+| Labels picker from real data (3-week scan with counts) plus typed labels | Planned (M4 slice 2) |
+| Date and time ranges: last hour, today, yesterday, last night (8 PM to 6 AM), custom window | Built (M4 slice 1): last hour, today, yesterday, last night, one chosen day; a custom start and end time later |
+| Filter by camera or group | Built (M4 slice 1): a menu of groups and cameras |
+| Flag/protect icons in the list and long-press menu | Built (M4 slice 1): icons on each alert; long-press opens the Flagged and Protected switches |
+| Retry once on "could not load alerts" with Blue Iris's reason; scan sends one request at a time | Built (M4 slice 1): asks once more after a pause, then shows Blue Iris's reason with Retry |
 | Preview panel (flip-book of 8 frames, Smooth mode) | N/A on phones (the web app also hides it there); consider for tablets in M6 |
 
 ## Settings, server and account

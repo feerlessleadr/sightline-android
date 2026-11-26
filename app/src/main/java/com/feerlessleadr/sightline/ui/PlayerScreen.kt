@@ -174,6 +174,9 @@ private const val DAY_MS = 86_400_000L
 /** The recording file of an alert being watched: when it starts and ends, whether it already ended or could not be opened. */
 private data class AlertClip(val file: String, val start: Long, val end: Long, val endedAt: Long = 0L, val broken: Boolean = false)
 
+private fun alertClipOf(a: AlertItem) =
+    AlertClip(AlertClips.fileFor(a.clip, a.path), a.timeMs - a.offsetMs, a.timeMs + AlertClips.durationMillis(a.fileSize))
+
 /**
  * One camera, live or from its recordings. The picture comes from a stream that restarts whenever the position,
  * speed or mode changes; while a recording is paused or being scrubbed a still picture of that moment is shown
@@ -204,6 +207,7 @@ fun PlayerScreen(
     onCancelDownload: () -> Unit,
     onDismissDownload: () -> Unit,
     onQuality: (VideoQuality) -> Unit,
+    initialAlert: AlertItem? = null,
     onBack: () -> Unit,
 ) {
     val id = camera.optionValue
@@ -220,14 +224,18 @@ fun PlayerScreen(
     var showGoTo by remember { mutableStateOf(false) }
 
     // What is being watched: live, or a recording that is playing or paused at [pos].
-    var live by remember { mutableStateOf(true) }
+    // Opened from the Alerts tab: start at that alert (two seconds before it, but not before its recording file starts).
+    val startAlert = remember(id) { initialAlert?.takeIf { it.camera.equals(id, ignoreCase = true) && !camera.isGroup } }
+    var live by remember { mutableStateOf(startAlert == null) }
     var playing by remember { mutableStateOf(true) }
-    var pos by remember { mutableLongStateOf(0L) }
+    var pos by remember { mutableLongStateOf(startAlert?.let { max(it.timeMs - 2000, alertClipOf(it).start) } ?: 0L) }
     var speed by remember { mutableIntStateOf(1) }
     var serial by remember { mutableIntStateOf(0) }
     var scrubbing by remember { mutableStateOf(false) }
     var resumeAfterScrub by remember { mutableStateOf(false) }
-    var window by remember { mutableStateOf(TimelineMath.liveWindow(900_000L, System.currentTimeMillis())) }
+    var window by remember {
+        mutableStateOf(if (startAlert != null) TimelineMath.centered(pos, 120_000L, System.currentTimeMillis()) else TimelineMath.liveWindow(900_000L, System.currentTimeMillis()))
+    }
     var nowMs by remember { mutableLongStateOf(System.currentTimeMillis()) }
     var timeline by remember(id) { mutableStateOf(Timeline.Empty) }
     var timelineNote by remember(id) { mutableStateOf<String?>(null) }
@@ -243,13 +251,13 @@ fun PlayerScreen(
     LaunchedEffect(soundOn, volume) { if (soundOn && volume > 0f) askAudio = true }
     SideEffect { sound.gain = if (soundOn) volume else 0f }
     DisposableEffect(sound) { onDispose { sound.stop() } }
-    var clip by remember(id) { mutableStateOf<AlertClip?>(null) }
+    var clip by remember(id) { mutableStateOf<AlertClip?>(startAlert?.let { alertClipOf(it) }) }
     // What the calendar learned about each month for this camera, kept while the player is open.
     val monthCache = remember(id) { HashMap<java.time.YearMonth, com.feerlessleadr.sightline.video.MonthInfo>() }
     // Flag or protect the alert being watched (Blue Iris keeps both in the alert's flags); the change shows at once and is
     // undone if Blue Iris refuses.
     val markScope = rememberCoroutineScope()
-    var alertItem by remember(id) { mutableStateOf<AlertItem?>(null) }
+    var alertItem by remember(id) { mutableStateOf<AlertItem?>(startAlert) }
     var flagOverrides by remember { mutableStateOf<Map<String, Long>>(emptyMap()) }
     var showMark by remember { mutableStateOf(false) }
     var showDownload by remember { mutableStateOf(false) }
@@ -1630,7 +1638,7 @@ private fun listLayoutOf(group: Camera): GroupLayout? {
 /** Flag or protect the alert being watched: two switches, saved in Blue Iris so Blue Iris and UI3 show them too. */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun MarkSheet(
+internal fun MarkSheet(
     info: String,
     flagged: Boolean,
     protectedAlert: Boolean,

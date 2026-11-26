@@ -32,6 +32,8 @@ import com.feerlessleadr.sightline.data.LockPolicy
 import com.feerlessleadr.sightline.data.LoginFailedException
 import com.feerlessleadr.sightline.data.RecentAlert
 import com.feerlessleadr.sightline.data.AlertItem
+import com.feerlessleadr.sightline.data.AlertsFeed
+import com.feerlessleadr.sightline.data.AlertFlags
 import com.feerlessleadr.sightline.data.Timeline
 import com.feerlessleadr.sightline.data.SavedSession
 import com.feerlessleadr.sightline.data.SessionStore
@@ -350,6 +352,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     private fun lockNow() {
         val old = client
         client = null
+        alerts.clear()
         memoryCredentials = null
         downloadJob?.cancel()
         sessions.clear()
@@ -466,6 +469,37 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         }
     }
 
+    // ---- the Alerts tab ----
+
+    /** The alert list (kept here so it survives opening an alert in the player and coming back). */
+    val alerts = AlertsFeed(
+        scope = viewModelScope,
+        fetch = { camera, startSec, endSec -> guarded { it.cameraAlerts(camera, startSec * 1000, endSec * 1000) } },
+        shown = { name ->
+            _state.value.session?.cameras?.cameras?.any { it.optionValue.equals(name, ignoreCase = true) && it.isEnabled && !it.hidden } ?: true
+        },
+    )
+
+    /** The thumbnail of an alert, or null if it cannot be had (the list shows a blank). */
+    suspend fun alertThumbnail(path: String): ByteArray? = try {
+        guarded { it.thumbnail(AlertFlags.recordId(path)) }
+    } catch (e: SessionExpiredException) {
+        null
+    } catch (e: BlueIrisException) {
+        null
+    }
+
+    /** Flags or protects an alert from the list: shown at once, taken back if Blue Iris refuses (the error is rethrown). */
+    suspend fun changeAlertFlags(path: String, before: Long, after: Long) {
+        alerts.noteFlags(path, after)
+        try {
+            guarded { it.setAlertFlags(path, after) }
+        } catch (e: BlueIrisException) {
+            alerts.noteFlags(path, before)
+            throw e
+        }
+    }
+
     /** The player's calls to Blue Iris (live and recorded video, stills, timeline, alerts). */
     val playerApi = PlayerApi(
         openLive = { camera, size, audio, group -> guarded { it.openVideo(camera, size, audio, group) } },
@@ -475,7 +509,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         recordedStill = { camera, pos, width, group -> guarded { it.recordedStill(camera, pos, width, group) } },
         timeline = { camera, start, end, step -> guarded { it.timeline(camera, start, end, step) } },
         alerts = { camera, start, end -> guarded { it.cameraAlerts(camera, start, end) } },
-        setFlags = { path, flags -> guarded { it.setAlertFlags(path, flags) } },
+        setFlags = { path, flags -> guarded { it.setAlertFlags(path, flags) }.also { alerts.noteFlags(path, flags) } },
     )
 
     /** Diagnostic for Settings -> Test video start: one line describing how [variant] of opening [camera] performed. */
@@ -585,6 +619,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     fun signOut() {
         val old = client
         client = null
+        alerts.clear()
         memoryCredentials = null
         downloadJob?.cancel() // a download does not go on after signing out
         sessions.clear()
@@ -645,6 +680,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     private fun hardEndSession(message: String?) {
         memoryCredentials = null
         client = null
+        alerts.clear()
         sessions.clear()
         if (neverModeNow()) {
             // "Never" lock: just sign in again with the saved password.

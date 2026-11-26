@@ -8,7 +8,12 @@ import androidx.activity.enableEdgeToEdge
 import androidx.activity.viewModels
 import androidx.biometric.BiometricManager
 import androidx.biometric.BiometricPrompt
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.remember
+import com.feerlessleadr.sightline.data.AlertItem
+import com.feerlessleadr.sightline.ui.AlertsActions
+import com.feerlessleadr.sightline.ui.HomeTab
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -74,6 +79,32 @@ class MainActivity : FragmentActivity() {
                 }
 
                 var liveCamera by rememberSaveable { mutableStateOf<String?>(null) }
+                // An alert opened from the Alerts tab: the player starts at it. Cleared when the camera changes or the player closes.
+                var alertToPlay by remember { mutableStateOf<AlertItem?>(null) }
+                var homeTab by rememberSaveable { mutableStateOf(HomeTab.Live) }
+                val alertsUi by viewModel.alerts.state.collectAsState()
+                val alertsListState = rememberLazyListState()
+                val alertsActions = remember(viewModel) {
+                    AlertsActions(
+                        ensureLoaded = viewModel.alerts::ensureLoaded,
+                        reload = viewModel.alerts::reload,
+                        loadMore = viewModel.alerts::loadMore,
+                        select = viewModel.alerts::select,
+                        setCamera = viewModel.alerts::setCamera,
+                        setRange = viewModel.alerts::setRange,
+                        lookFurtherBack = viewModel.alerts::lookFurtherBack,
+                        retry = viewModel.alerts::retry,
+                        thumbnail = viewModel::alertThumbnail,
+                        open = { alert ->
+                            val camera = viewModel.state.value.session?.cameras?.cameras?.firstOrNull { it.optionValue.equals(alert.camera, ignoreCase = true) }
+                            if (camera != null) {
+                                alertToPlay = alert
+                                liveCamera = camera.optionValue
+                            }
+                        },
+                        changeFlags = viewModel::changeAlertFlags,
+                    )
+                }
                 var showSettings by rememberSaveable { mutableStateOf(false) }
                 // Leaving the signed-in state (sign-out, lock, expired session) also leaves these screens.
                 LaunchedEffect(session == null) {
@@ -98,6 +129,7 @@ class MainActivity : FragmentActivity() {
                             // Remember where the group view was opened from, so its button can go back there.
                             if (target.isGroup && !live.isGroup) groupFrom = live.optionValue
                             if (!target.isGroup) groupFrom = null
+                            alertToPlay = null
                             liveCamera = target.optionValue
                         },
                         groupTarget = if (live.isGroup) session.cameraToReturnTo(live, groupFrom) else session.groupFor(live.optionValue),
@@ -118,7 +150,8 @@ class MainActivity : FragmentActivity() {
                         onCancelDownload = viewModel::cancelDownload,
                         onDismissDownload = viewModel::dismissDownload,
                         onQuality = viewModel::setQuality,
-                        onBack = { liveCamera = null },
+                        onBack = { liveCamera = null; alertToPlay = null },
+                        initialAlert = alertToPlay,
                     )
                     session != null && showSettings -> SettingsScreen(
                         session = session,
@@ -153,6 +186,11 @@ class MainActivity : FragmentActivity() {
                         onRecentAlerts = viewModel::recentAlerts,
                         onSignInAgain = viewModel::signInAgainNow,
                         onSettings = { showSettings = true },
+                        tab = homeTab,
+                        onTab = { homeTab = it },
+                        alerts = alertsUi,
+                        alertsListState = alertsListState,
+                        alertsActions = alertsActions,
                     )
                     state.locked -> LockScreen(
                         form = state.form,

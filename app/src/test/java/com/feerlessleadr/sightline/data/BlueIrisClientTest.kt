@@ -364,6 +364,22 @@ class BlueIrisClientTest {
         assertFalse(server.takeRequest().body.readUtf8().contains("\"view\""))
     }
 
+    @Test fun `an alert thumbnail is fetched by record id with the cookie only`() = runBlocking {
+        signedInClient()
+        server.enqueue(MockResponse().addHeader("Content-Type", "image/jpeg").setBody("thumbbytes"))
+        assertEquals("thumbbytes", String(client.thumbnail("123")))
+        val request = server.takeRequest()
+        assertEquals(listOf("thumbs", "@123"), request.requestUrl!!.pathSegments)
+        assertEquals(null, request.requestUrl!!.queryParameter("session"))
+        assertTrue(request.getHeader("Cookie").orEmpty().contains("session"))
+        try {
+            client.thumbnail("")
+            fail("expected BlueIrisException")
+        } catch (e: BlueIrisException) {
+            assertEquals("This alert has no picture.", e.message)
+        }
+    }
+
     @Test fun `a refused export explains itself`() = runBlocking {
         signedInClient()
         reply("""{"result":"fail","data":{"reason":"Access denied"}}""")

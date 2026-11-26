@@ -284,6 +284,18 @@ class BlueIrisClient(
             .addQueryParameter("q", quality.coerceIn(10, 100).toString())
             .apply { if (group) { addQueryParameter("flags", "1"); addQueryParameter("mask", "1") } }
             .build()
+        return fetchPicture(url)
+    }
+
+    /** The thumbnail of an alert (`/thumbs/@<record id>`), cookie only. [recordId] is the plain number of the alert's record. */
+    suspend fun thumbnail(recordId: String): ByteArray {
+        if (session == null) throw SessionExpiredException()
+        if (recordId.isEmpty()) throw BlueIrisException("This alert has no picture.")
+        val url = baseUrl.newBuilder().addPathSegment("thumbs").addPathSegment("@$recordId").build()
+        return fetchPicture(url)
+    }
+
+    private suspend fun fetchPicture(url: okhttp3.HttpUrl): ByteArray {
         val request = Request.Builder().url(url).get().build()
         return withContext(Dispatchers.IO) {
             try {
