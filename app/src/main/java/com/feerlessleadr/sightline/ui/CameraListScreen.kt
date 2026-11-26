@@ -24,6 +24,9 @@ import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.repeatOnLifecycle
 import com.feerlessleadr.sightline.data.CameraTag
+import com.feerlessleadr.sightline.data.PopupEvent
+import com.feerlessleadr.sightline.data.PopupTracker
+import androidx.compose.runtime.SideEffect
 import com.feerlessleadr.sightline.data.RecentAlert
 import com.feerlessleadr.sightline.data.mergeTags
 import kotlinx.coroutines.delay
@@ -140,17 +143,26 @@ private fun LiveTab(
             }
         }
     }
-    LaunchedEffect(wantsStatus) {
-        if (!wantsStatus) return@LaunchedEffect
+    // Pop-ups: a new detection of what the owner chose pops that camera up (only cameras in the group on screen).
+    val popupConfig by rememberUpdatedState(session.popup)
+    val tracker = remember { PopupTracker() }
+    var popupEvent by remember { mutableStateOf<PopupEvent?>(null) }
+    var gridNames by remember { mutableStateOf(emptySet<String>()) }
+    LaunchedEffect(session.popup.isOn) { if (!session.popup.isOn) popupEvent = null }
+    val needsAlerts = wantsStatus || session.popup.isOn
+    LaunchedEffect(needsAlerts) {
+        if (!needsAlerts) return@LaunchedEffect
         lifecycle.repeatOnLifecycle(Lifecycle.State.STARTED) {
             while (true) {
                 val alerts = onRecentAlerts()
-                aiTags = mergeTags(aiTags, alerts) { shown.isEmpty() || it.lowercase() in shown }
+                if (wantsStatus) aiTags = mergeTags(aiTags, alerts) { shown.isEmpty() || it.lowercase() in shown }
+                tracker.consider(alerts, popupConfig, { it.lowercase() in gridNames }, popupEvent != null)?.let { popupEvent = it }
                 nowMs = System.currentTimeMillis()
                 delay(4_000L)
             }
         }
     }
+    Box(Modifier.fillMaxSize()) {
     Column(Modifier.fillMaxSize()) {
         if (!session.online) {
             Row(
@@ -242,5 +254,23 @@ private fun LiveTab(
                 )
             }
         }
+    }
+    val allCameras = session.cameras
+    val shownGroup = allCameras?.groups.orEmpty().let { g -> g.firstOrNull { it.optionValue == session.selectedGroup } ?: g.firstOrNull { it.optionValue == "index" } }
+    val gridCameras = allCameras?.visibleCameras(shownGroup).orEmpty()
+    SideEffect { gridNames = gridCameras.map { it.optionValue.lowercase() }.toSet() }
+    val popupCamera = popupEvent?.let { ev -> allCameras?.cameras?.firstOrNull { it.optionValue.equals(ev.camera, ignoreCase = true) } }
+    if (popupEvent != null && popupCamera != null) {
+        PopupBox(
+            event = popupEvent!!,
+            camera = popupCamera,
+            liveVideo = session.liveVideo,
+            loadStill = loadStill,
+            openVideo = openVideo,
+            onOpen = { popupEvent = null; onOpenCamera(popupCamera) },
+            onClose = { popupEvent = null },
+            modifier = Modifier.align(Alignment.Center).padding(12.dp),
+        )
+    }
     }
 }

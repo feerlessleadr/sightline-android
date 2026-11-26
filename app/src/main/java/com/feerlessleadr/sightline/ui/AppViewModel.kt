@@ -29,6 +29,7 @@ import com.feerlessleadr.sightline.data.BlueIrisException
 import com.feerlessleadr.sightline.data.Camera
 import com.feerlessleadr.sightline.data.CameraList
 import com.feerlessleadr.sightline.data.CredentialStore
+import com.feerlessleadr.sightline.data.PopupConfig
 import com.feerlessleadr.sightline.data.LockAfter
 import com.feerlessleadr.sightline.data.LockPolicy
 import com.feerlessleadr.sightline.data.LoginFailedException
@@ -89,6 +90,7 @@ data class SessionState(
     /** A folder the owner chose for downloads (a tree address from the phone's folder picker), or null for the Downloads folder. */
     val downloadFolder: String? = null,
     val downloadFolderName: String? = null,
+    val popup: PopupConfig = PopupConfig(),
     /** Sound in the player (on or muted) and its volume, 0 to 2 (1 is normal). */
     val soundOn: Boolean = true,
     val volume: Float = 1f,
@@ -571,6 +573,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         ),
         downloadFolder = prefs.getString(KEY_DOWNLOAD_FOLDER, null),
         downloadFolderName = prefs.getString(KEY_DOWNLOAD_FOLDER, null)?.let { folderName(android.net.Uri.parse(it)) },
+        popup = PopupConfig.decode(prefs.getString(KEY_POPUP, null)),
         soundOn = prefs.getBoolean(KEY_SOUND_ON, true),
         volume = prefs.getFloat(KEY_VOLUME, 1f).coerceIn(0f, 2f),
         motionSensitivity = prefs.getInt(KEY_MOTION_SENS, 5).coerceIn(1, 10),
@@ -600,6 +603,12 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         val value = level.coerceIn(1, 10)
         prefs.edit().putInt(KEY_MOTION_SENS, value).apply()
         _state.update { s -> s.session?.let { s.copy(session = it.copy(motionSensitivity = value)) } ?: s }
+    }
+
+    /** Which detections pop a camera up on the grid (Settings > Pop up on detection). */
+    fun setPopup(config: PopupConfig) {
+        prefs.edit().putString(KEY_POPUP, config.encode()).apply()
+        _state.update { s -> s.session?.let { s.copy(session = it.copy(popup = config)) } ?: s }
     }
 
     fun setAiLabels(on: Boolean) {
@@ -1120,6 +1129,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
 
     private companion object {
         const val KEY_ALERT_FILTERS = "alert_filters"
+        const val KEY_POPUP = "popup_config"
         const val KEY_ADDRESS = "address"
         const val KEY_USER = "username"
         const val KEY_TILE_SIZE = "tile_size_"

@@ -46,7 +46,7 @@ Status: **Done**, **Partial**, **Planned (Mn)**, **N/A** (with the reason). "And
 | AI labels on tiles, e.g. "Dog 88%"; setting "AI labels on cameras"; ONVIF event names read as Person, Vehicle, Animal, Face, Visitor, Intrusion, Line crossed, Alarm input | Done (labels and ONVIF names; M4 reuses the mapping) |
 | Camera status dot: online green, triggered red, offline grey; offline tile dark | Done |
 | Optional motion boxes on tiles (frame comparison), sensitivity 1 to 10 | Done on tiles (M2 round 2); player in M3 |
-| Pop up cameras on detection (People / Vehicles / Animals / custom labels, 20 s, pauses on touch, only cameras in the shown group, one pop-up per alert, not in the player or Alerts tab) | Planned (M5) |
+| Pop up cameras on detection (People / Vehicles / Animals / custom labels, 20 s, pauses on touch, only cameras in the shown group, one pop-up per alert, not in the player or Alerts tab) | Built (M5): Settings > Pop up on detection; a card over the grid with live video, holding pauses the countdown, tap opens the camera |
 | Full screen for the whole grid | Done |
 | "Reconnecting" banner on a network blip instead of the login screen; offline card with Try now / Sign in again | Done |
 

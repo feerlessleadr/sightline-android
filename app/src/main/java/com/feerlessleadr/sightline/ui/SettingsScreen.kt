@@ -54,6 +54,8 @@ fun SettingsScreen(
     onAiLabels: (Boolean) -> Unit,
     onMotionBoxes: (Boolean) -> Unit,
     onMotionSensitivity: (Int) -> Unit,
+    onPopup: (com.feerlessleadr.sightline.data.PopupConfig) -> Unit,
+    filterSettings: com.feerlessleadr.sightline.data.AlertFilterSettings,
     onQuality: (VideoQuality) -> Unit,
     onResetLayout: () -> Unit,
     onDownloadFolder: (android.net.Uri?) -> Unit,
@@ -92,6 +94,7 @@ fun SettingsScreen(
             SwitchRow("AI labels on cameras", "Shows what the AI saw, like \"Person 91%\", while it is still happening", session.aiLabels, onAiLabels)
             SwitchRow("Motion boxes", "Draws a box around movement it finds by comparing pictures (uses a little more data: stills refresh faster)", session.motionBoxes, onMotionBoxes)
             ChoiceRow("Motion box sensitivity", "${session.motionSensitivity} of 10 · ${MotionSensitivity.describe(session.motionSensitivity)}") { dialog = "sensitivity" }
+            ChoiceRow("Pop up on detection", session.popup.summary()) { dialog = "popup" }
             ActionRow("Reset layout for this view", "Back to Blue Iris's order, normal tiles and fit-to-screen size for the group shown", onResetLayout)
             Section("Video")
             ChoiceRow("Video quality", "${session.quality.label} · ${session.quality.note}") { dialog = "quality" }
@@ -167,6 +170,7 @@ fun SettingsScreen(
             }
         }
     }
+    if (dialog == "popup") PopupSheet(session.popup, filterSettings, onPopup) { dialog = null }
     when (dialog) {
         "quality" -> ChoiceDialog(
             title = "Video quality",

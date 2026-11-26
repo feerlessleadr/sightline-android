@@ -7,7 +7,7 @@ enum class AlertClass { Person, Vehicle, Animal, Delivery, Motion }
 data class AlertTag(val cls: AlertClass, val text: String)
 
 /** An alert from `alertlist`, with only the fields the grid needs. */
-data class RecentAlert(val camera: String, val memo: String, val dateSeconds: Long, val flags: Long)
+data class RecentAlert(val camera: String, val memo: String, val dateSeconds: Long, val flags: Long, val path: String = "")
 
 /**
  * Turns Blue Iris's alert text (the "memo", like `person:90%` or `dog:88%,car:55%`) into tags, using the same rules

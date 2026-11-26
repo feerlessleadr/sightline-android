@@ -173,7 +173,7 @@ private fun builtInNote(id: String) = when (id) {
 }
 
 @Composable
-private fun Heading(text: String) {
+internal fun Heading(text: String) {
     Text(text, style = MaterialTheme.typography.titleSmall, color = Sl.Muted, modifier = Modifier.padding(top = 16.dp, bottom = 4.dp))
 }
 
@@ -189,7 +189,7 @@ private fun ModeRow(title: String, sub: String, selected: Boolean, onClick: () -
 }
 
 @Composable
-private fun ToggleRow(title: String, sub: String, on: Boolean, onRemove: (() -> Unit)?, onToggle: () -> Unit) {
+internal fun ToggleRow(title: String, sub: String, on: Boolean, onRemove: (() -> Unit)?, onToggle: () -> Unit) {
     Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
         Column(Modifier.weight(1f).padding(vertical = 6.dp)) {
             Text(title, color = Sl.Text)

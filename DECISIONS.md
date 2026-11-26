@@ -466,3 +466,14 @@ Append-only, newest at the bottom. Never rewrite history; reverse a decision wit
 - **Context**: The alert link only opened the app. The link handler cleared `pendingLink` first; that changed the effect's key, restarted the effect and cancelled the suspended `findAlert` call. The live link has no suspend call, so it finished in time.
 - **Decision**: clear the pending link only after the screen has been chosen.
 - **Impact**: `MainActivity.kt` only. Lesson: do not change an effect's own key from inside it before suspending work is done.
+
+### 2026-11-25, M5: pop up cameras on detection
+- **Context**: The web app can pop a camera up large, with live video, when it detects People, Vehicles, Animals or one of the owner's labels. It is opt-in, lasts 20 s, pauses while pointed at, opens the camera on a click, and only works for cameras in the group on screen while the grid is showing.
+- **Decision**: same rules. `PopupConfig` (kinds person/vehicle/animal plus own labels, JSON in preferences `popup_config`) and `PopupTracker` (data layer, tested): an alert counts once (by its record path), only if under 30 s old, only for a camera in the group shown, never lets an older alert replace a newer one that is showing, and the newest of one poll wins. Plain motion never pops up. The grid's existing 4-second recent-alert poll now also runs when pop-ups are on. `PopupBox` overlays the grid: coloured by the alert class, live video (when Live video in tiles is on) over a picture refreshed every second, a countdown bar from 20 s, holding a finger on it pauses the countdown (the touch version of the web app's pointing), a tap or "Open camera" opens the camera, "Close", a newer detection on the camera restarts the 20 s, and it closes when the app goes to the background. Settings > Live view > "Pop up on detection" opens a sheet (People, Vehicles, Animals switches, labels from the same 3-week scan as Alert filters with counts, add your own label).
+- **Differences**: no sound or vibration (the web app has none); the pop-up is a card over the grid, not a full overlay.
+- **Impact**: `data/Popup.kt` (new), `ui/PopupBox.kt`, `ui/PopupSheet.kt`, `RecentAlert.path`, `SettingsScreen`, `CameraListScreen` (LiveTab), view model (`setPopup`, session field `popup`). Untested on a phone.
+
+### 2026-11-25, Pop-ups: a master on/off switch that keeps the choices
+- **Context**: The owner wanted a plain way to turn pop-ups on and off. The web app turns them off by clearing the choices.
+- **Decision**: `PopupConfig.enabled` (default on, so a choice saved before this stays on). The top switch in the sheet ("Pop up cameras") turns pop-ups off without losing the chosen kinds and labels, and the settings row reads "Off (People, UPS)". Choosing a kind or label while off turns pop-ups on again. The old "Turn all off" button was removed.
+- **Impact**: `data/Popup.kt`, `ui/PopupSheet.kt`, `PopupTest`.

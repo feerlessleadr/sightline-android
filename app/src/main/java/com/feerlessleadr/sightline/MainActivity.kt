@@ -211,6 +211,8 @@ class MainActivity : FragmentActivity() {
                         onAiLabels = viewModel::setAiLabels,
                         onMotionBoxes = viewModel::setMotionBoxes,
                         onMotionSensitivity = viewModel::setMotionSensitivity,
+                        onPopup = viewModel::setPopup,
+                        filterSettings = viewModel.alertFilters,
                         onQuality = viewModel::setQuality,
                         onResetLayout = { viewModel.resetLayout(session.selectedGroup ?: "index") },
                         onDownloadFolder = viewModel::setDownloadFolder,

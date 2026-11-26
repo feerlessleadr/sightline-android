@@ -156,6 +156,7 @@ class BlueIrisClient(
                 memo = o["memo"]?.jsonPrimitive?.contentOrNull.orEmpty(),
                 dateSeconds = o["date"]?.jsonPrimitive?.contentOrNull?.toDoubleOrNull()?.toLong() ?: 0L,
                 flags = o["flags"]?.jsonPrimitive?.contentOrNull?.toDoubleOrNull()?.toLong() ?: 0L,
+                path = o["path"]?.jsonPrimitive?.contentOrNull.orEmpty(),
             )
         }
     }
