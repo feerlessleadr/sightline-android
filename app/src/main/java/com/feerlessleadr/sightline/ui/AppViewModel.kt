@@ -483,6 +483,15 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         },
     )
 
+    /** Finds an alert of [camera] from the last 3 days by its Blue Iris id (a notification link); null if it is not there. */
+    suspend fun findAlert(camera: String, id: String): com.feerlessleadr.sightline.data.AlertItem? = try {
+        val want = AlertFlags.recordId(id)
+        val now = System.currentTimeMillis()
+        guarded { it.cameraAlerts(camera, now - 3 * 86_400_000L, now + 60_000L) }.firstOrNull { AlertFlags.recordId(it.path) == want }
+    } catch (e: BlueIrisException) {
+        null
+    }
+
     /** Which filter buttons the Alerts tab shows, kept on the phone. */
     val alertFilters = AlertFilterSettings(
         scope = viewModelScope,

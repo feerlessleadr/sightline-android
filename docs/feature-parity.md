@@ -93,6 +93,7 @@ Status: **Done**, **Partial**, **Planned (Mn)**, **N/A** (with the reason). "And
 ## Settings, server and account
 | Web feature | Status |
 |---|---|
+| Notification links (Home Assistant clickAction opens the app at a camera, an alert or the alerts list) | Built (M4b, Android-only addition: custom scheme sightline://); not in the web app |
 | Settings screen started (Live video toggle, Video quality, Lock the app, Forget saved sign-in, Sign out). Web sheet: Live view (Highlight, AI labels, Live video in tiles, Pop up on detection, Show hidden cameras, Reset layout), Interface (Groups on Live screen, Alert filters, Motion box sensitivity, Alert preview panel, Colour legend), Server (Server status, System log, Activity), Account (Stay signed in, UI3 link, Sign out, About) | Planned (M5; individual items arrive with their milestones). Settings are per device, stored locally, never in the repo |
 | Server status: CPU (and GPU), memory, recordings vs allowed space, total fps and bitrate, uptime, web connections, warnings, profile; refreshed every 2 s | Planned (M5) |
 | Disk usage per disk (recordings, allocated free, other, free) with over-allocation note | Planned (M5) |

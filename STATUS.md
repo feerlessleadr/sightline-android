@@ -7,7 +7,7 @@ Last updated: 2026-11-25
 - M1 (sign-in, camera list), M2 (live view) and M3 (player) are done and owner-verified on a phone: recorded playback and timeline, calendar, alert clip files, audio, tap/double tap/full screen/landscape, swipe between cameras, frame step, motion boxes, group view, pinch zoom, flag/protect, download an alert as MP4.
 - Also done and owner-verified: download a clip with a chosen start and end, Settings > Downloads > Save downloads to (needed a newer Fragment library), pull to refresh instead of the header refresh button.
 - Built, NOT yet seen on a phone: the player restarts its decoder when a recording changes picture size part-way (committed).
-- **M4 slice 1 (Alerts tab): pushed (cd9c1d6), works on the phone.** **M4 slice 2 (Alert filters: Choose/Auto, labels, 3-week scan) built, NOT yet seen on a phone, NOT committed.** 177 unit tests pass. Custom start/end time built (not yet seen on a phone, not committed). Left in M4: colour legend.
+- **M4b deep links built and verified on the phone (live, alert, alerts tab, URI button), NOT committed.** Format in notifications: `deep-link://sightline://live/<camera>` etc. (connection 17 in WORKSPACE.md). Next: change the HA automations (ha session), then M5.
 - Docs: `docs/feature-parity.md` (matrix), `docs/blue-iris-api.md` (API notes), `DECISIONS.md`.
 
 ## Feature target
@@ -37,3 +37,6 @@ $env:JAVA_HOME = 'C:\Program Files\Android\Android Studio\jbr'; $env:Path = "$en
 .\gradlew.bat test assembleDebug lintDebug
 ```
 `local.properties` (git-ignored) needs `sdk.dir` with escaped separators, for example `sdk.dir=C\:\\Users\\<you>\\AppData\\Local\\Android\\Sdk`. Gradle wrapper is 9.8.1, copied from Embidextrous.
+
+## Deep links test (M4b)
+Install the new APK, then from a PC send a test notification from Home Assistant Developer Tools > Actions (notify service for your phone) with `data: {clickAction: "sightline://live/FrontDoor"}` (use one of your camera short names). Tap it: the app should open that camera live (after the fingerprint if locked). Then try `sightline://alerts`, and an alert link `sightline://alert/FrontDoor/@<a real alert id>.bvr` (the id is the `alert_db` from the MQTT message; on the Alerts tab the ids are not shown, so use a live alert). With the app already open on another screen, tapping should still switch to the link. If tapping does nothing, tell me what the notification app did (opened a browser? nothing?).

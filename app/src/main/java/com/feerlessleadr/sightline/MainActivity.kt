@@ -12,6 +12,7 @@ import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.remember
 import com.feerlessleadr.sightline.data.AlertItem
+import com.feerlessleadr.sightline.data.DeepLink
 import com.feerlessleadr.sightline.ui.AlertsActions
 import com.feerlessleadr.sightline.ui.HomeTab
 import androidx.compose.runtime.collectAsState
@@ -41,8 +42,19 @@ class MainActivity : FragmentActivity() {
     private val viewModel: AppViewModel by viewModels()
     private var prompting = false
 
+    /** A notification link waiting to be opened (see [DeepLink]). */
+    private var pendingLink by mutableStateOf<DeepLink?>(null)
+
+    override fun onNewIntent(intent: android.content.Intent) {
+        super.onNewIntent(intent)
+        setIntent(intent)
+        DeepLink.parse(intent.data?.toString())?.let { pendingLink = it }
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        // A recreated activity (after the system stopped the app) must not open the same link again.
+        if (savedInstanceState == null) pendingLink = DeepLink.parse(intent?.data?.toString())
         // Dark only, like the web app: light icons on the status and navigation bars.
         enableEdgeToEdge(
             statusBarStyle = SystemBarStyle.dark(android.graphics.Color.TRANSPARENT),
@@ -118,11 +130,47 @@ class MainActivity : FragmentActivity() {
                 // The player shows a camera, or a whole group (which Blue Iris offers as one combined picture).
                 var groupFrom by rememberSaveable { mutableStateOf<String?>(null) }
                 val live = session?.cameras?.let { list -> list.cameras.firstOrNull { it.optionValue == liveCamera } ?: list.groups.firstOrNull { it.optionValue == liveCamera } }
+                // A link from a notification (sightline://...): waits here until the app is unlocked and the camera list is in.
+                val link = pendingLink
+                val ready = session?.cameras != null
+                LaunchedEffect(link, ready) {
+                    if (link == null || !ready || session == null) return@LaunchedEffect
+                    // The link is cleared only at the end: clearing it restarts this effect, which would cancel the alert lookup.
+                    showSettings = false
+                    groupFrom = null
+                    val cams = session.cameras?.cameras.orEmpty()
+                    fun find(name: String) = cams.firstOrNull { it.optionValue.equals(name, ignoreCase = true) && it.isEnabled }
+                    fun say(text: String) = android.widget.Toast.makeText(this@MainActivity, text, android.widget.Toast.LENGTH_LONG).show()
+                    when (link) {
+                        DeepLink.Alerts -> { liveCamera = null; alertToPlay = null; homeTab = HomeTab.Alerts }
+                        DeepLink.Cameras -> { liveCamera = null; alertToPlay = null; homeTab = HomeTab.Live }
+                        is DeepLink.Live -> {
+                            alertToPlay = null
+                            val camera = find(link.camera)
+                            if (camera != null) liveCamera = camera.optionValue else { liveCamera = null; say("No camera called ${link.camera}") }
+                        }
+                        is DeepLink.Alert -> {
+                            val camera = find(link.camera)
+                            if (camera == null) {
+                                liveCamera = null
+                                alertToPlay = null
+                                say("No camera called ${link.camera}")
+                            } else {
+                                val alert = viewModel.findAlert(camera.optionValue, link.id)
+                                alertToPlay = alert
+                                liveCamera = camera.optionValue
+                                if (alert == null) say("Couldn't find that alert, showing the live view")
+                            }
+                        }
+                    }
+                    pendingLink = null
+                }
                 BackHandler(enabled = live != null) { liveCamera = null }
                 BackHandler(enabled = live == null && showSettings) { showSettings = false }
 
                 when {
-                    session != null && live != null -> PlayerScreen(
+                    // Keyed so that a link to another alert on the same camera starts the player afresh.
+                    session != null && live != null -> androidx.compose.runtime.key(live.optionValue, alertToPlay?.path) { PlayerScreen(
                         camera = live,
                         quality = session.quality,
                         api = viewModel.playerApi,
@@ -154,7 +202,7 @@ class MainActivity : FragmentActivity() {
                         onQuality = viewModel::setQuality,
                         onBack = { liveCamera = null; alertToPlay = null },
                         initialAlert = alertToPlay,
-                    )
+                    ) }
                     session != null && showSettings -> SettingsScreen(
                         session = session,
                         onBack = { showSettings = false },
