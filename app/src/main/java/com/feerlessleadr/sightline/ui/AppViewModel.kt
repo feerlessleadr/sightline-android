@@ -2,6 +2,8 @@ package com.feerlessleadr.sightline.ui
 
 import android.app.Application
 import android.content.Context
+import com.feerlessleadr.sightline.data.AlertFilterConfig
+import com.feerlessleadr.sightline.data.AlertFilterSettings
 import com.feerlessleadr.sightline.data.Exports
 import com.feerlessleadr.sightline.data.ExportStart
 import com.feerlessleadr.sightline.data.ExportOptions
@@ -353,6 +355,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         val old = client
         client = null
         alerts.clear()
+        alertFilters.clear()
         memoryCredentials = null
         downloadJob?.cancel()
         sessions.clear()
@@ -478,6 +481,17 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         shown = { name ->
             _state.value.session?.cameras?.cameras?.any { it.optionValue.equals(name, ignoreCase = true) && it.isEnabled && !it.hidden } ?: true
         },
+    )
+
+    /** Which filter buttons the Alerts tab shows, kept on the phone. */
+    val alertFilters = AlertFilterSettings(
+        scope = viewModelScope,
+        fetch = { camera, startSec, endSec -> guarded { it.cameraAlerts(camera, startSec * 1000, endSec * 1000) } },
+        shown = { name ->
+            _state.value.session?.cameras?.cameras?.any { it.optionValue.equals(name, ignoreCase = true) && it.isEnabled && !it.hidden } ?: true
+        },
+        load = { AlertFilterConfig.decode(prefs.getString(KEY_ALERT_FILTERS, null)) },
+        save = { prefs.edit().putString(KEY_ALERT_FILTERS, it.encode()).apply() },
     )
 
     /** The thumbnail of an alert, or null if it cannot be had (the list shows a blank). */
@@ -620,6 +634,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         val old = client
         client = null
         alerts.clear()
+        alertFilters.clear()
         memoryCredentials = null
         downloadJob?.cancel() // a download does not go on after signing out
         sessions.clear()
@@ -681,6 +696,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         memoryCredentials = null
         client = null
         alerts.clear()
+        alertFilters.clear()
         sessions.clear()
         if (neverModeNow()) {
             // "Never" lock: just sign in again with the saved password.
@@ -1094,6 +1110,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     private companion object {
+        const val KEY_ALERT_FILTERS = "alert_filters"
         const val KEY_ADDRESS = "address"
         const val KEY_USER = "username"
         const val KEY_TILE_SIZE = "tile_size_"

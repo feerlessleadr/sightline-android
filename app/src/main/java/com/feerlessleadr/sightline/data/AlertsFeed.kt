@@ -90,6 +90,15 @@ class AlertsFeed(
         reload()
     }
 
+    /** Drops selected filters that are no longer among the buttons shown, and reloads if any went. */
+    fun retainFilters(allowed: List<String>) {
+        val current = _state.value.filters
+        val keep = current.filter { id -> allowed.any { sameFilter(it, id) } }
+        if (keep.size == current.size) return
+        _state.update { it.copy(filters = keep) }
+        if (_state.value.loadedOnce) reload()
+    }
+
     fun setCamera(camera: String) {
         if (camera == _state.value.camera) return
         _state.update { it.copy(camera = camera) }

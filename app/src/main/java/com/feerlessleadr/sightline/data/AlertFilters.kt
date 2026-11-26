@@ -29,7 +29,10 @@ object AlertFilters {
     )
     private val people = Regex("""\b(person|people)\b""")
 
-    fun label(text: String) = "label:" + text.trim().lowercase()
+    /** True if [word] (already normalised) is a vehicle word like car or trucks. */
+    fun vehicleWord(word: String) = vehicles.containsMatchIn(word)
+
+    fun label(text: String) ="label:" + text.trim().lowercase()
 
     /** The text on the button. */
     fun name(id: String): String = when (id) {

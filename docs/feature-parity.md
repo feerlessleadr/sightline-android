@@ -80,10 +80,10 @@ Status: **Done**, **Partial**, **Planned (Mn)**, **N/A** (with the reason). "And
 | Web feature | Status |
 |---|---|
 | Alert list with thumbnails, labels, camera, time; tap to play from the moment | Built (M4 slice 1): thumbnails, tags, camera, time, duration, flag and lock icons, day headings, loads older alerts as you scroll; tap plays it from the alert |
-| Filter buttons: All, People, Vehicles, Animals, Flagged, and any custom label; capitalisation and plurals ignored; People / Vehicles use the AI flag or the label | Built for All, People, Vehicles, Animals, Flagged (M4 slice 1); custom labels in slice 2 |
+| Filter buttons: All, People, Vehicles, Animals, Flagged, and any custom label; capitalisation and plurals ignored; People / Vehicles use the AI flag or the label | Built for All, People, Vehicles, Animals, Flagged (M4 slice 1); custom labels via Edit (slice 2) |
 | Combine filters (long-press adds), All clears | Built (M4 slice 1): long-press a button to add it to the others, All clears |
-| Choose mode (hand-picked) vs Auto mode (always-show pins, then top labels from a 3-week scan, fit-to-screen up to 5 or 1 to 8); counts refreshed every few hours; new users start on Choose with All, People, Vehicles, Animals; one-time tip | Planned (M4 slice 2) |
-| Labels picker from real data (3-week scan with counts) plus typed labels | Planned (M4 slice 2) |
+| Choose mode (hand-picked) vs Auto mode (always-show pins, then top labels from a 3-week scan, fit-to-screen up to 5 or 1 to 8); counts refreshed every few hours; new users start on Choose with All, People, Vehicles, Animals; one-time tip | Built (M4 slice 2): Edit button opens the Alert filters sheet; Fit screen = up to 5; no one-time tip; Flagged is also in the default set |
+| Labels picker from real data (3-week scan with counts) plus typed labels | Built (M4 slice 2): labels seen with counts, add and remove your own |
 | Date and time ranges: last hour, today, yesterday, last night (8 PM to 6 AM), custom window | Built (M4 slice 1): last hour, today, yesterday, last night, one chosen day; a custom start and end time later |
 | Filter by camera or group | Built (M4 slice 1): a menu of groups and cameras |
 | Flag/protect icons in the list and long-press menu | Built (M4 slice 1): icons on each alert; long-press opens the Flagged and Protected switches |

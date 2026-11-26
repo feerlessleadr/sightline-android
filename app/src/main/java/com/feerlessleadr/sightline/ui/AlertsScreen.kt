@@ -38,7 +38,9 @@ import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.material3.rememberDatePickerState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.derivedStateOf
+import com.feerlessleadr.sightline.data.AlertFilterSettings
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -94,6 +96,8 @@ class AlertsActions(
     val thumbnail: suspend (path: String) -> ByteArray?,
     val open: (AlertItem) -> Unit,
     val changeFlags: suspend (path: String, before: Long, after: Long) -> Unit,
+    val retainFilters: (allowed: List<String>) -> Unit,
+    val filterSettings: AlertFilterSettings,
 )
 
 /** Thumbnails already loaded, and a limit on how many are asked for at once. */
@@ -120,7 +124,15 @@ fun AlertsTab(
     listState: LazyListState,
     actions: AlertsActions,
 ) {
-    LaunchedEffect(Unit) { actions.ensureLoaded() }
+    LaunchedEffect(Unit) {
+        actions.ensureLoaded()
+        actions.filterSettings.refreshIfStale()
+    }
+    val filterUi by actions.filterSettings.state.collectAsState()
+    val chips = remember(filterUi.config) { filterUi.config.chips() }
+    // A button that is no longer shown can't stay selected.
+    LaunchedEffect(chips) { actions.retainFilters(chips) }
+    var showFilters by remember { mutableStateOf(false) }
     val names = remember(groups, cameras) { (groups + cameras).associate { it.optionValue.lowercase() to it.displayName } }
     val nameOf: (String) -> String = { camera -> names[camera.lowercase()] ?: camera }
     var showRange by remember { mutableStateOf(false) }
@@ -163,7 +175,7 @@ fun AlertsTab(
             contentPadding = PaddingValues(horizontal = 12.dp, vertical = 2.dp),
             horizontalArrangement = Arrangement.spacedBy(8.dp),
         ) {
-            items(AlertFilters.DEFAULT, key = { it }) { id ->
+            items(chips, key = { it }) { id ->
                 val on = if (id == AlertFilters.ALL) ui.filters.isEmpty() else id in ui.filters
                 val haptic = LocalHapticFeedback.current
                 FilterPill(
@@ -175,6 +187,9 @@ fun AlertsTab(
                         actions.select(id, true)
                     },
                 )
+            }
+            item(key = "edit-filters") {
+                TextButton(onClick = { showFilters = true }) { Text("Edit") }
             }
         }
         PullToRefreshBox(isRefreshing = refreshing, onRefresh = { refreshing = true; actions.reload() }, modifier = Modifier.fillMaxSize()) {
@@ -209,6 +224,7 @@ fun AlertsTab(
             onDismiss = { showRange = false },
         )
     }
+    if (showFilters) AlertFiltersSheet(filterUi, actions.filterSettings) { showFilters = false }
     markTarget?.let { alert ->
         MarkHost(alert, ui.flagsOf(alert), nameOf(alert.camera), actions.changeFlags) { markTarget = null }
     }

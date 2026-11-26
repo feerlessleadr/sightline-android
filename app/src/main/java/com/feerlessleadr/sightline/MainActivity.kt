@@ -103,6 +103,8 @@ class MainActivity : FragmentActivity() {
                             }
                         },
                         changeFlags = viewModel::changeAlertFlags,
+                        retainFilters = viewModel.alerts::retainFilters,
+                        filterSettings = viewModel.alertFilters,
                     )
                 }
                 var showSettings by rememberSaveable { mutableStateOf(false) }
