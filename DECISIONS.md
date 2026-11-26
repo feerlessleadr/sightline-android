@@ -445,3 +445,8 @@ Append-only, newest at the bottom. Never rewrite history; reverse a decision wit
 - **Android differences**: "Fit screen" in Auto means up to 5 recent buttons (the row scrolls on a narrow phone) instead of measuring the width. The default set stays All, People, Vehicles, Animals, Flagged (the web default has no Flagged).
 - **Note**: the plural rule strips a trailing "s" from three-letter words, so "ups" and "up" are the same label; this matches the web app.
 - **Impact**: `data/AlertFilterSettings.kt` (new), `ui/AlertFiltersSheet.kt` (new), `AlertsFeed.retainFilters`, `AlertFilters.vehicleWord`, `AlertsActions` (+`retainFilters`, `filterSettings`), view model (`alertFilters`, cleared on sign-out). Still to do in M4: custom start/end time and the colour legend.
+
+### 2026-11-25, M4: custom start and end time for the alert range
+- **Context**: Slice 1 only offered whole days. The web app has a date with From and To times; a To before From runs past midnight (10 PM to 2 AM).
+- **Decision**: "Pick a day and time…" in the time sheet opens a dialog with Date (calendar, nothing later than today), From and To (clock pickers, 12 or 24 hour as the phone is set). `AlertRange.window` builds the range (From at the start of its minute, To at the end of its minute, +1 day if To is not after From). Full day = the old "pick a day".
+- **Impact**: `AlertsScreen.kt` (`CustomRangeDialog`), `AlertFilters.kt` (`AlertRange.window`). Only the colour legend is left in M4.

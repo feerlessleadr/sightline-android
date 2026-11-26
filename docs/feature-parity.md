@@ -84,7 +84,7 @@ Status: **Done**, **Partial**, **Planned (Mn)**, **N/A** (with the reason). "And
 | Combine filters (long-press adds), All clears | Built (M4 slice 1): long-press a button to add it to the others, All clears |
 | Choose mode (hand-picked) vs Auto mode (always-show pins, then top labels from a 3-week scan, fit-to-screen up to 5 or 1 to 8); counts refreshed every few hours; new users start on Choose with All, People, Vehicles, Animals; one-time tip | Built (M4 slice 2): Edit button opens the Alert filters sheet; Fit screen = up to 5; no one-time tip; Flagged is also in the default set |
 | Labels picker from real data (3-week scan with counts) plus typed labels | Built (M4 slice 2): labels seen with counts, add and remove your own |
-| Date and time ranges: last hour, today, yesterday, last night (8 PM to 6 AM), custom window | Built (M4 slice 1): last hour, today, yesterday, last night, one chosen day; a custom start and end time later |
+| Date and time ranges: last hour, today, yesterday, last night (8 PM to 6 AM), custom window | Built (M4): quick ranges plus a date with From and To times; To before From runs past midnight |
 | Filter by camera or group | Built (M4 slice 1): a menu of groups and cameras |
 | Flag/protect icons in the list and long-press menu | Built (M4 slice 1): icons on each alert; long-press opens the Flagged and Protected switches |
 | Retry once on "could not load alerts" with Blue Iris's reason; scan sends one request at a time | Built (M4 slice 1): asks once more after a pause, then shows Blue Iris's reason with Retry |

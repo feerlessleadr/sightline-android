@@ -7,7 +7,7 @@ Last updated: 2026-11-25
 - M1 (sign-in, camera list), M2 (live view) and M3 (player) are done and owner-verified on a phone: recorded playback and timeline, calendar, alert clip files, audio, tap/double tap/full screen/landscape, swipe between cameras, frame step, motion boxes, group view, pinch zoom, flag/protect, download an alert as MP4.
 - Also done and owner-verified: download a clip with a chosen start and end, Settings > Downloads > Save downloads to (needed a newer Fragment library), pull to refresh instead of the header refresh button.
 - Built, NOT yet seen on a phone: the player restarts its decoder when a recording changes picture size part-way (committed).
-- **M4 slice 1 (Alerts tab): pushed (cd9c1d6), works on the phone.** **M4 slice 2 (Alert filters: Choose/Auto, labels, 3-week scan) built, NOT yet seen on a phone, NOT committed.** 177 unit tests pass. Left in M4: custom start/end time, colour legend.
+- **M4 slice 1 (Alerts tab): pushed (cd9c1d6), works on the phone.** **M4 slice 2 (Alert filters: Choose/Auto, labels, 3-week scan) built, NOT yet seen on a phone, NOT committed.** 177 unit tests pass. Custom start/end time built (not yet seen on a phone, not committed). Left in M4: colour legend.
 - Docs: `docs/feature-parity.md` (matrix), `docs/blue-iris-api.md` (API notes), `DECISIONS.md`.
 
 ## Feature target
@@ -21,7 +21,8 @@ Parity with the web app Sightline for Blue Iris (https://github.com/rw377/Sightl
 ## Owner must do
 - Picture-size change: nothing to do unless a recording from a camera that switches between its sub and main stream shows a corner of the picture or freezes at the switch; tell me the camera and time.
 - Range download across a recording-file boundary is untested (set aside by the owner).
-- Alert filters (new): on the Alerts tab tap Edit at the end of the filter row. Try Auto (it scans the last 3 weeks, so give it a moment), the count chips, turning built-in buttons and labels on and off, adding a label of your own (e.g. a name Blue Iris reports), and check the row changes and a selected button that you hide stops filtering. Quit and reopen: choices should stay.
+- Time range (new): time button > Pick a day and time; set Date, From, To; try To earlier than From (runs into next day).
+- Alert filters (done): on the Alerts tab tap Edit at the end of the filter row. Try Auto (it scans the last 3 weeks, so give it a moment), the count chips, turning built-in buttons and labels on and off, adding a label of your own (e.g. a name Blue Iris reports), and check the row changes and a selected button that you hide stops filtering. Quit and reopen: choices should stay.
 - Alerts tab (slice 1, done): alerts load newest first with a thumbnail, tags, camera, time, duration and flag/lock icons under Today/Yesterday headings, older ones loading as you scroll. Try the buttons (tap one; long-press to combine; All clears), the camera menu, the time button (last hour, today, yesterday, last night, pick a day), pull down to reload, long-press an alert for Flagged/Protected, tap an alert (the player opens at it; Back returns to the same place in the list). Tell me what looks or works wrong.
 - Everything else listed in earlier versions of this file was checked by the owner.
 

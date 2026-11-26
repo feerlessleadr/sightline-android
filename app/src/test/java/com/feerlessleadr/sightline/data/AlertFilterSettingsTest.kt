@@ -104,6 +104,18 @@ class AlertFilterSettingsTest {
     }
 
     @Test
+    fun aCustomWindowRunsFromToAndPastMidnightWhenToIsEarlier() {
+        val zone = java.time.ZoneOffset.UTC
+        val day = java.time.LocalDate.of(2026, 11, 20)
+        val full = AlertRange.window(day, 0, 23 * 60 + 59, zone)
+        assertEquals(AlertRange.day(day, zone), full)
+        val night = AlertRange.window(day, 22 * 60, 2 * 60, zone) // 10 PM to 2 AM next day
+        assertEquals(4 * 3600L + 59, night.endSec - night.startSec)
+        val evening = AlertRange.window(day, 18 * 60, 20 * 60 + 30, zone)
+        assertEquals(2 * 3600L + 30 * 60 + 59, evening.endSec - evening.startSec)
+    }
+
+    @Test
     fun labelsMapToTheirButtons() {
         assertEquals("people", LabelTally.recentId("person"))
         assertEquals("vehicles", LabelTally.recentId("Trucks"))

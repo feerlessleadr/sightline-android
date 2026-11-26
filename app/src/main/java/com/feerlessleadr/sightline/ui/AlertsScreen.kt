@@ -432,25 +432,88 @@ private fun RangeSheet(current: AlertRange?, onPick: (AlertRange?) -> Unit, onDi
             )) {
                 TextButton(onClick = { onPick(range) }, modifier = Modifier.fillMaxWidth()) { Text(label, modifier = Modifier.fillMaxWidth()) }
             }
-            TextButton(onClick = { pickDay = true }, modifier = Modifier.fillMaxWidth()) { Text("Pick a day…", modifier = Modifier.fillMaxWidth()) }
+            TextButton(onClick = { pickDay = true }, modifier = Modifier.fillMaxWidth()) { Text("Pick a day and time…", modifier = Modifier.fillMaxWidth()) }
             if (current != null) {
                 Button(onClick = { onPick(null) }, modifier = Modifier.fillMaxWidth().padding(top = 8.dp)) { Text("Any time") }
             }
         }
     }
     if (pickDay) {
-        val state = rememberDatePickerState(initialSelectedDateMillis = now * 1000)
-        DatePickerDialog(
-            onDismissRequest = { pickDay = false },
-            confirmButton = {
-                TextButton(onClick = {
-                    val picked = state.selectedDateMillis
-                    pickDay = false
-                    if (picked != null) onPick(AlertRange.day(Instant.ofEpochMilli(picked).atZone(ZoneOffset.UTC).toLocalDate(), zone))
-                }) { Text("Show") }
-            },
-            dismissButton = { TextButton(onClick = { pickDay = false }) { Text("Cancel") } },
-        ) { DatePicker(state) }
+        CustomRangeDialog(current, zone, now, onDismiss = { pickDay = false }, onPick = { pickDay = false; onPick(it) })
+    }
+}
+
+/** A date with a From and To time, like the web app's range form. A To before From runs past midnight. */
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun CustomRangeDialog(current: AlertRange?, zone: ZoneId, now: Long, onDismiss: () -> Unit, onPick: (AlertRange) -> Unit) {
+    val base = Instant.ofEpochSecond(current?.startSec ?: now).atZone(zone)
+    var date by remember { mutableStateOf(base.toLocalDate()) }
+    var from by remember { mutableStateOf(if (current != null) base.hour * 60 + base.minute else 0) }
+    var to by remember {
+        mutableStateOf(
+            current?.let { Instant.ofEpochSecond(it.endSec).atZone(zone).let { e -> e.hour * 60 + e.minute } } ?: (23 * 60 + 59),
+        )
+    }
+    var step by remember { mutableStateOf(0) } // 0 the form, 1 date, 2 from, 3 to
+    val locale = androidx.compose.ui.platform.LocalConfiguration.current.locales[0]
+    val clock = SimpleDateFormat("h:mm a", locale)
+    fun timeText(minutes: Int) = clock.format(Date(java.time.LocalTime.of(minutes / 60, minutes % 60).atDate(date).atZone(zone).toInstant().toEpochMilli()))
+    val dateText = SimpleDateFormat("EEE, MMM d, yyyy", locale).format(Date(date.atStartOfDay(zone).toInstant().toEpochMilli()))
+    androidx.compose.material3.AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Show alerts from") },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                TextButton(onClick = { step = 1 }, modifier = Modifier.fillMaxWidth()) { Text("Date: $dateText", modifier = Modifier.fillMaxWidth()) }
+                TextButton(onClick = { step = 2 }, modifier = Modifier.fillMaxWidth()) { Text("From: ${timeText(from)}", modifier = Modifier.fillMaxWidth()) }
+                TextButton(onClick = { step = 3 }, modifier = Modifier.fillMaxWidth()) { Text("To: ${timeText(to)}", modifier = Modifier.fillMaxWidth()) }
+                if (to <= from) Text("A To before From runs into the next day.", color = Sl.Muted, style = MaterialTheme.typography.bodySmall)
+            }
+        },
+        confirmButton = { TextButton(onClick = { onPick(AlertRange.window(date, from, to, zone)) }) { Text("Show alerts") } },
+        dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } },
+    )
+    when (step) {
+        1 -> {
+            val state = rememberDatePickerState(
+                initialSelectedDateMillis = date.atStartOfDay(ZoneOffset.UTC).toInstant().toEpochMilli(),
+                selectableDates = object : androidx.compose.material3.SelectableDates {
+                    override fun isSelectableDate(utcTimeMillis: Long) = utcTimeMillis <= System.currentTimeMillis() + 14 * 3_600_000L
+                },
+            )
+            DatePickerDialog(
+                onDismissRequest = { step = 0 },
+                confirmButton = {
+                    TextButton(onClick = {
+                        state.selectedDateMillis?.let { date = Instant.ofEpochMilli(it).atZone(ZoneOffset.UTC).toLocalDate() }
+                        step = 0
+                    }) { Text("OK") }
+                },
+                dismissButton = { TextButton(onClick = { step = 0 }) { Text("Cancel") } },
+            ) { DatePicker(state) }
+        }
+        2, 3 -> {
+            val start = if (step == 2) from else to
+            val tp = androidx.compose.material3.rememberTimePickerState(
+                initialHour = start / 60,
+                initialMinute = start % 60,
+                is24Hour = android.text.format.DateFormat.is24HourFormat(androidx.compose.ui.platform.LocalContext.current),
+            )
+            androidx.compose.material3.AlertDialog(
+                onDismissRequest = { step = 0 },
+                title = { Text(if (step == 2) "From" else "To") },
+                text = { androidx.compose.material3.TimePicker(tp) },
+                confirmButton = {
+                    TextButton(onClick = {
+                        val m = tp.hour * 60 + tp.minute
+                        if (step == 2) from = m else to = m
+                        step = 0
+                    }) { Text("OK") }
+                },
+                dismissButton = { TextButton(onClick = { step = 0 }) { Text("Cancel") } },
+            )
+        }
     }
 }
 

@@ -140,6 +140,15 @@ data class AlertRange(val startSec: Long, val endSec: Long) {
             return AlertRange(start, start + 86_399)
         }
 
+        /** One day from [fromMinute] to the end of minute [toMinute] (minutes after midnight); a To not after From runs past midnight. */
+        fun window(date: LocalDate, fromMinute: Int, toMinute: Int, zone: ZoneId): AlertRange {
+            val midnight = date.atStartOfDay(zone)
+            val start = midnight.plusMinutes(fromMinute.toLong()).toEpochSecond()
+            var end = midnight.plusMinutes(toMinute.toLong()).toEpochSecond() + 59
+            if (end <= start) end += 86_400
+            return AlertRange(start, end)
+        }
+
         fun today(nowSec: Long, zone: ZoneId) = day(Instant.ofEpochSecond(nowSec).atZone(zone).toLocalDate(), zone)
 
         fun yesterday(nowSec: Long, zone: ZoneId) = day(Instant.ofEpochSecond(nowSec).atZone(zone).toLocalDate().minusDays(1), zone)
