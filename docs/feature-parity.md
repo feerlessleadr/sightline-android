@@ -95,9 +95,9 @@ Status: **Done**, **Partial**, **Planned (Mn)**, **N/A** (with the reason). "And
 |---|---|
 | Notification links (Home Assistant clickAction opens the app at a camera, an alert or the alerts list) | Built (M4b, Android-only addition: custom scheme sightline://); not in the web app |
 | Settings screen started (Live video toggle, Video quality, Lock the app, Forget saved sign-in, Sign out). Web sheet: Live view (Highlight, AI labels, Live video in tiles, Pop up on detection, Show hidden cameras, Reset layout), Interface (Groups on Live screen, Alert filters, Motion box sensitivity, Alert preview panel, Colour legend), Server (Server status, System log, Activity), Account (Stay signed in, UI3 link, Sign out, About) | Planned (M5; individual items arrive with their milestones). Settings are per device, stored locally, never in the repo |
-| Server status: CPU (and GPU), memory, recordings vs allowed space, total fps and bitrate, uptime, web connections, warnings, profile; refreshed every 2 s | Planned (M5) |
-| Disk usage per disk (recordings, allocated free, other, free) with over-allocation note | Planned (M5) |
-| Per-camera frame rate, bitrate, "footage kept" (long timeline request, at most every 10 min) | Planned (M5) |
+| Server status: CPU (and GPU), memory, recordings vs allowed space, total fps and bitrate, uptime, web connections, warnings, profile; refreshed every 2 s | Built (M5): Settings > Server status; Warnings tile does not open the log yet |
+| Disk usage per disk (recordings, allocated free, other, free) with over-allocation note | Built (M5) |
+| Per-camera frame rate, bitrate, "footage kept" (long timeline request, at most every 10 min) | Frame rate and bitrate built (M5); footage kept still to do |
 | System log: newest first, level icons, repeat counts, filters (All / Warnings & errors / Info), search; clear message for non-admin users | Planned (M5) |
 | Activity overview: alerts per day for 7/14/30 days stacked by type, camera x hour heat map, People/Vehicles/Animals filters, tap a camera, 4 requests at a time, kept 10 min | Planned (M5) |
 | Stay signed in through Blue Iris session timeouts | Android: fingerprint/PIN unlock with saved password (done); auto re-sign-in after a session timeout while the app is open (done, M2 round 2: the password stays in memory only after an unlock or a Remember me sign-in) |

@@ -64,6 +64,7 @@ fun SettingsScreen(
     onForgetSaved: () -> Unit,
     onProbe: suspend (camera: String, size: StreamRequest, variant: ProbeVariant) -> String,
     onSignOut: () -> Unit,
+    onServerStatus: () -> Unit,
 ) {
     var dialog by remember { mutableStateOf<String?>(null) }
     val probeLines = remember { mutableStateListOf<String>() }
@@ -131,6 +132,8 @@ fun SettingsScreen(
                     modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp),
                 )
             }
+            Section("Server")
+            ActionRow("Server status", "CPU, memory, recording space, frame rates and disks of your Blue Iris server", onServerStatus)
             Section("Account")
             ActionRow("Sign out", null, onSignOut)
             Section("Developer")

@@ -1076,6 +1076,19 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         }
     }
 
+    /** Blue Iris's status and its cameras, for the Server status screen; null if they cannot be had right now. */
+    suspend fun serverView(): Pair<com.feerlessleadr.sightline.data.ServerStatus, List<com.feerlessleadr.sightline.data.Camera>>? {
+        val current = client ?: return null
+        return try {
+            current.serverStatus() to current.cameras().cameras
+        } catch (e: SessionExpiredException) {
+            if (client === current) endSession(e.message)
+            null
+        } catch (e: BlueIrisException) {
+            null
+        }
+    }
+
     /** Alerts from the last two minutes (the web app asks every 4 s) for the AI labels; empty if they cannot be had. */
     suspend fun recentAlerts(): List<RecentAlert> {
         val current = client ?: return emptyList()

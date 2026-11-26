@@ -267,6 +267,9 @@ class BlueIrisClient(
         )
     }
 
+    /** Blue Iris's status: CPU, memory, disks, uptime and so on (Server status screen). */
+    suspend fun serverStatus(): ServerStatus = ServerStatus.parse(call(buildJsonObject { put("cmd", "status") }).data)
+
     /** Keeps the Blue Iris session from idling out (the web app does this every 40 s). */
     suspend fun keepAlive() {
         call(buildJsonObject { put("cmd", "status") })
