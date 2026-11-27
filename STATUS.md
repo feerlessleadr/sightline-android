@@ -14,7 +14,11 @@ Last updated: 2026-11-27
 Parity with the web app Sightline for Blue Iris (https://github.com/rw377/Sightline-for-Blue-Iris). Behaviour is the spec; no code is copied.
 
 ## Next steps
-1. M1 to M6 are all built and v0.1.3 is published (latest). Nothing is in progress and the working tree is clean.2. Very next action: owner tests on devices what has not been tried (TalkBack, tablet or wide window with the alert preview panel, Show group layout, system log with an admin user, footage kept on a large server, the updated libraries) and reports problems; fixes go into v0.1.4 (tags never move).3. Known gaps: no screen-reader way to reorder camera tiles, faint grey text is below the usual contrast target, no Smooth preview mode.4. Not done on purpose: requiring pull requests or CI on main (would block direct pushes); two secret-scanning extras would not enable (maybe a plan limit).5. Lint leftovers (warnings only): SharedPreferences.edit KTX suggestion.
+1. M1 to M6 are all built and v0.1.3 is published (latest). Nothing is in progress and the working tree is clean.
+2. Very next action: owner tests on devices what has not been tried (TalkBack, tablet or wide window with the alert preview panel, Show group layout, system log with an admin user, footage kept on a large server, the updated libraries) and reports problems; fixes go into v0.1.4 (tags never move).
+3. Known gaps: no screen-reader way to reorder camera tiles, faint grey text is below the usual contrast target, no Smooth preview mode.
+4. Not done on purpose: requiring pull requests or CI on main (would block direct pushes); two secret-scanning extras would not enable (maybe a plan limit).
+5. Lint leftovers (warnings only): SharedPreferences.edit KTX suggestion.
 
 ## Owner must do
 - Picture-size change: nothing to do unless a recording from a camera that switches between its sub and main stream shows a corner of the picture or freezes at the switch; tell me the camera and time.
