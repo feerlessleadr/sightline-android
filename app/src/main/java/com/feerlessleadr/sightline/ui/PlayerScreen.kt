@@ -34,6 +34,7 @@ import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.graphics.TransformOrigin
 import androidx.compose.ui.graphics.drawscope.withTransform
+import androidx.compose.ui.text.drawText
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.input.pointer.positionChanged
@@ -208,6 +209,8 @@ fun PlayerScreen(
     onDismissDownload: () -> Unit,
     onQuality: (VideoQuality) -> Unit,
     initialAlert: AlertItem? = null,
+    /** Troubleshooting (Settings > Developer): a group view shows Blue Iris's picture as it is, with each camera outlined. */
+    groupDebug: Boolean = false,
     onBack: () -> Unit,
 ) {
     val id = camera.optionValue
@@ -310,7 +313,8 @@ fun PlayerScreen(
     // hidden or disabled the shown ones are cut out of it and drawn in a grid of their own (the web app's way).
     val context = LocalContext.current
     val groupShown = if (camera.isGroup) camera.group.orEmpty().filter { findCamera(it) != null } else emptyList()
-    val useGrid = camera.isGroup && groupShown.isNotEmpty() && groupShown.size < camera.group.orEmpty().size
+    val showGroupDebug = groupDebug && camera.isGroup
+    val useGrid = !showGroupDebug && camera.isGroup && groupShown.isNotEmpty() && groupShown.size < camera.group.orEmpty().size
     val glView = remember(useGrid) { if (useGrid) GroupGlView(context) else null }
     val lifecycleOwner = LocalLifecycleOwner.current
     DisposableEffect(glView, lifecycleOwner) {
@@ -1029,6 +1033,36 @@ fun PlayerScreen(
                     tv.alpha = if (outgoingStill != null) 0f else 1f // hidden (not stopped) while its snapshot slides
                 },
             )
+            // Troubleshooting overlay: where the app thinks each camera is in Blue Iris's group picture (green: shown,
+            // red: hidden, disabled or not allowed), and the sizes involved. Follows the zoom and panning.
+            if (showGroupDebug) {
+                val measurer = androidx.compose.ui.text.rememberTextMeasurer()
+                val layout = gridLayout ?: groupLayout
+                val shownIn = layout?.cams?.count { findCamera(it) != null } ?: 0
+                Canvas(Modifier.fillMaxSize()) {
+                    val fit = ZoomMath.fit(size.width, size.height, aspect, false)
+                    val label = androidx.compose.ui.text.TextStyle(color = Color.White, fontSize = 11.sp)
+                    if (layout != null && layout.width > 0 && layout.height > 0) {
+                        withTransform({
+                            translate(panX + swipeOffset, panY)
+                            scale(zoom, zoom, pivot = Offset.Zero)
+                        }) {
+                            layout.rects.forEachIndexed { i, r ->
+                                val x = fit[0] + r[0] / layout.width.toFloat() * fit[2]
+                                val y = fit[1] + r[1] / layout.height.toFloat() * fit[3]
+                                val w = (r[2] - r[0]) / layout.width.toFloat() * fit[2]
+                                val h = (r[3] - r[1]) / layout.height.toFloat() * fit[3]
+                                val ok = findCamera(layout.cams[i]) != null
+                                val color = if (ok) Color(0xFF3DDC84) else Color(0xFFFF4D4D)
+                                drawRect(color, Offset(x + 1f, y + 1f), androidx.compose.ui.geometry.Size(w - 2f, h - 2f), style = androidx.compose.ui.graphics.drawscope.Stroke(2.dp.toPx()))
+                                drawText(measurer, "$i ${layout.cams[i]}", Offset(x + 6f, y + h - 18.dp.toPx()), style = label.copy(color = color))
+                            }
+                        }
+                    }
+                    val info = if (layout == null) "group layout: none known (the whole picture is shown)" else "group layout ${layout.width}x${layout.height}: ${layout.cams.size} cameras, $shownIn shown"
+                    drawText(measurer, info, Offset(8.dp.toPx(), 8.dp.toPx()), style = label)
+                }
+            }
             // Covers the video only while no video frame is showing (a paused recording, or the start of a stream).
             if (!streaming) {
                 still?.let { picture ->

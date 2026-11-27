@@ -98,6 +98,7 @@ fun CameraListScreen(
                     cameras = session.cameras?.visibleCameras(null, session.showHidden).orEmpty(),
                     listState = alertsListState,
                     actions = alertsActions,
+                    previewOn = session.alertPreview,
                 )
             }
         }

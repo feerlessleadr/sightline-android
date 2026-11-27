@@ -91,6 +91,10 @@ data class SessionState(
     val downloadFolder: String? = null,
     val downloadFolderName: String? = null,
     val popup: PopupConfig = PopupConfig(),
+    /** Developer: outline each camera of a group picture in the player. */
+    val groupDebug: Boolean = false,
+    /** On wide screens the Alerts tab shows a preview panel beside the list. */
+    val alertPreview: Boolean = true,
     /** The file name of the web version of Sightline on the Blue Iris server (Settings > Account). */
     val webPage: String = com.feerlessleadr.sightline.data.WebLink.DEFAULT_PAGE,
     /** Show cameras marked Hidden in Blue Iris (disabled ones never show). */
@@ -537,6 +541,15 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         null
     }
 
+    /** A still picture of [camera] at [positionMs] for the alert preview panel; null if Blue Iris has none. */
+    suspend fun alertFrame(camera: String, positionMs: Long): ByteArray? = try {
+        guarded { it.recordedStill(camera, positionMs, 960) }
+    } catch (e: SessionExpiredException) {
+        null
+    } catch (e: BlueIrisException) {
+        null
+    }
+
     /** Flags or protects an alert from the list: shown at once, taken back if Blue Iris refuses (the error is rethrown). */
     suspend fun changeAlertFlags(path: String, before: Long, after: Long) {
         alerts.noteFlags(path, after)
@@ -599,6 +612,8 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         popup = PopupConfig.decode(prefs.getString(KEY_POPUP, null)),
         webPage = com.feerlessleadr.sightline.data.WebLink.clean(prefs.getString(KEY_WEB_PAGE, null)) ?: com.feerlessleadr.sightline.data.WebLink.DEFAULT_PAGE,
         showHidden = prefs.getBoolean(KEY_SHOW_HIDDEN, false),
+        groupDebug = prefs.getBoolean(KEY_GROUP_DEBUG, false),
+        alertPreview = prefs.getBoolean(KEY_ALERT_PREVIEW, true),
         hiddenGroups = prefs.getStringSet(KEY_HIDDEN_GROUPS, emptySet()).orEmpty().toSet(),
         soundOn = prefs.getBoolean(KEY_SOUND_ON, true),
         volume = prefs.getFloat(KEY_VOLUME, 1f).coerceIn(0f, 2f),
@@ -651,6 +666,18 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         prefs.edit().putStringSet(KEY_HIDDEN_GROUPS, next).apply()
         _state.update { s -> s.session?.let { s.copy(session = it.copy(hiddenGroups = next)) } ?: s }
         return true
+    }
+
+    /** Settings: the alert preview panel beside the list on wide screens. */
+    fun setAlertPreview(on: Boolean) {
+        prefs.edit().putBoolean(KEY_ALERT_PREVIEW, on).apply()
+        _state.update { s -> s.session?.let { s.copy(session = it.copy(alertPreview = on)) } ?: s }
+    }
+
+    /** Developer: show or hide the group layout outlines in the player. */
+    fun setGroupDebug(on: Boolean) {
+        prefs.edit().putBoolean(KEY_GROUP_DEBUG, on).apply()
+        _state.update { s -> s.session?.let { s.copy(session = it.copy(groupDebug = on)) } ?: s }
     }
 
     /** Saves the web page file name; false if it is not allowed (see [com.feerlessleadr.sightline.data.WebLink]). */
@@ -1226,6 +1253,8 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         const val KEY_POPUP = "popup_config"
         const val KEY_WEB_PAGE = "web_page"
         const val KEY_SHOW_HIDDEN = "show_hidden"
+        const val KEY_GROUP_DEBUG = "group_debug"
+        const val KEY_ALERT_PREVIEW = "alert_preview"
         const val KEY_HIDDEN_GROUPS = "hidden_groups"
         const val KEY_ADDRESS = "address"
         const val KEY_USER = "username"

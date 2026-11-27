@@ -20,6 +20,11 @@ import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.drawText
 import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.semantics.CustomAccessibilityAction
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.customActions
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.unit.sp
 import com.feerlessleadr.sightline.data.AlertClass
 import com.feerlessleadr.sightline.data.AlertItem
@@ -76,6 +81,22 @@ fun TimelineBar(
         modifier
             .fillMaxWidth()
             .height(64.dp)
+            .semantics {
+                contentDescription = "Timeline"
+                stateDescription = if (positionMs == null) "Live" else SimpleDateFormat("MMM d, h:mm:ss a", Locale.getDefault()).format(Date(positionMs))
+                // A screen reader cannot drag along the timeline, so it gets steps back and forward instead.
+                val here = positionMs ?: nowMs
+                fun step(label: String, deltaMs: Long) = CustomAccessibilityAction(label) {
+                    scrub((here + deltaMs).coerceAtMost(nowMs))
+                    scrubEnd()
+                    true
+                }
+                customActions = listOf(
+                    step("Back 15 seconds", -15_000L), step("Forward 15 seconds", 15_000L),
+                    step("Back 5 minutes", -300_000L), step("Forward 5 minutes", 300_000L),
+                    step("Back 1 hour", -3_600_000L), step("Go to live", Long.MAX_VALUE / 4),
+                )
+            }
             .pointerInput(Unit) {
                 awaitEachGesture {
                     val first = awaitFirstDown(requireUnconsumed = false)

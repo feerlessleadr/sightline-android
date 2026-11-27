@@ -71,7 +71,7 @@ Status: **Done**, **Partial**, **Planned (Mn)**, **N/A** (with the reason). "And
 | Restart at new size if a recording changes picture size | Built (M3), needs a real size change to confirm |
 | Keeps the screen awake while the player is open (wake lock, found in the source only) | Done (M3 stage 1) |
 | Short haptic buzz on long-press actions (found in the source only) | Done (M2 round 2) |
-| Troubleshooting switches `?grpdebug=1` (outline each camera on the group picture) and `?cliprewind=0/1` (force clip-list rewinding) | Planned (M6): hidden developer options |
+| Troubleshooting switches `?grpdebug=1` (outline each camera on the group picture) and `?cliprewind=0/1` (force clip-list rewinding) | grpdebug built (M6): Settings > Developer > Show group layout, in the player; cliprewind N/A (the file-rewind fallback was dropped) |
 | Flag / protect an alert (`update` command), flags shown, "Flagged" filter; clear message without permission | Player done (M3: chip and sheet); list icons and the Flagged filter done in the alerts tab (M4 slice 1) |
 | Download alert or any range as MP4 (export): re-encode H.264 (default) or original, encoder profile 0 to 3, overlay, audio, choose start/end by draggable handles or set-at-playhead, up to 2 h, size estimate, progress, cancel, readable file name, permission message | Done (M3): whole alert, options, progress, cancel, saved to Downloads, and a range chosen on the timeline (set start/end at the playhead, shaded band, up to 2 h, size estimate); handle dragging not done (the buttons set the ends); list entry with the alerts tab (M4) |
 | Link to open full Blue Iris UI (UI3) | Changed by the owner: opens the Sightline web page on the Blue Iris server (file name is a setting, default sightline.htm), not UI3 (M5 built) |
@@ -88,7 +88,7 @@ Status: **Done**, **Partial**, **Planned (Mn)**, **N/A** (with the reason). "And
 | Filter by camera or group | Built (M4 slice 1): a menu of groups and cameras |
 | Flag/protect icons in the list and long-press menu | Built (M4 slice 1): icons on each alert; long-press opens the Flagged and Protected switches |
 | Retry once on "could not load alerts" with Blue Iris's reason; scan sends one request at a time | Built (M4 slice 1): asks once more after a pause, then shows Blue Iris's reason with Retry |
-| Preview panel (flip-book of 8 frames, Smooth mode) | N/A on phones (the web app also hides it there); consider for tablets in M6 |
+| Preview panel (flip-book of 8 frames, Smooth mode) | Built for wide screens (M6): at 840 dp or wider the Alerts tab shows the list and a preview panel (Standard flip-book of 8 stills, 220 ms a frame); a mouse pointing at an alert, or a tap, chooses it; Settings > Alert preview panel turns it off. Smooth (video) mode not built |
 
 ## Settings, server and account
 | Web feature | Status |
@@ -109,3 +109,11 @@ Push notifications, two-way audio, saving PTZ presets, focus/IR controls, changi
 ## Our additions (Android only)
 HTTPS-only enforcement, fingerprint/PIN unlock with encrypted saved password, no cleartext, no redirects, size-capped replies.
 
+
+## Accessibility and large screens (M6, Android additions)
+
+| Item | Status |
+|---|---|
+| Screen reader (TalkBack): camera tiles say their name, state (motion, triggered, no signal) and AI label, with Open and a "Tile size and layout" action; alert cards read as one sentence (labels, camera, time, length, flagged, protected) with Play and Flag or protect actions; filter buttons say they are selected; the timeline reads its position and has steps (15 s, 5 min, 1 hour back, forward, live); pop-up, activity map and colour legend are readable | Built (M6); not tried with TalkBack on a phone |
+| Large screens: Settings, Server status, System log, Activity, About and Colour legend keep to 720 dp wide, centred; Alerts shows the preview panel (above) | Built (M6); not tried on a tablet |
+| Known gaps: dragging a camera tile to reorder has no screen-reader alternative yet; the faintest text colour (disabled and secondary text) is below the usual contrast target | Open |

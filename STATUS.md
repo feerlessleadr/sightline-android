@@ -7,7 +7,7 @@ Last updated: 2026-11-25
 - M1 (sign-in, camera list), M2 (live view) and M3 (player) are done and owner-verified on a phone: recorded playback and timeline, calendar, alert clip files, audio, tap/double tap/full screen/landscape, swipe between cameras, frame step, motion boxes, group view, pinch zoom, flag/protect, download an alert as MP4.
 - Also done and owner-verified: download a clip with a chosen start and end, Settings > Downloads > Save downloads to (needed a newer Fragment library), pull to refresh instead of the header refresh button.
 - Built, NOT yet seen on a phone: the player restarts its decoder when a recording changes picture size part-way (committed).
-- **M5 done (latest pushed 1c9cb59). Built, NOT committed: "Footage kept" (M5), the Alerts-list scroll fix, and the M6 CI/CodeQL/Dependabot files. None seen on a phone or on GitHub yet.**
+- **v0.1.1 published (2026-11-27, tag on 8960918). M6 code done. Open: Dependabot pull request 1 (actions, CI green, mergeable) and 2 (Gradle libraries, needs a rebase and a phone check) are not merged and wait for the owner. Not yet tried on devices: TalkBack and tablet behaviour.**
 - Docs: `docs/feature-parity.md` (matrix), `docs/blue-iris-api.md` (API notes), `DECISIONS.md`.
 
 ## Feature target
@@ -68,3 +68,12 @@ Settings > Server > Server status: a "Footage kept" tile (shows ... then a range
 ## Alerts scroll fix and M6 CI test
 1. Alerts tab: tap People, Vehicles, Animals, Flagged and All: the list should start at the NEWEST alert (top) each time, not jump to the oldest of today. Also try the camera menu and time button.
 2. GitHub (M6): after "commit and push" I will look at the first CI and CodeQL runs. You do on GitHub (Settings): Security > enable Dependabot alerts and security updates; do NOT also switch on CodeQL "default setup" (the workflow file does the job); optionally add a branch rule that requires the CI check before merging.
+
+## Release build test (M6)
+1. Install the shrunk release test build and use the app for a few minutes (live, player, alerts, settings, a download): `.gradlew.bat assembleRelease "-PreleaseDebugSigned=true"`, then install appbuildoutputspkeleasepp-release.apk. It installs as `com.feerlessleadr.sightline.rtest` next to the debug build (you sign in again). Tell me anything that works in debug but not here: that is R8 removing something.
+2. v0.1.0 PUBLISHED (tag v0.1.0, commit 3f57737). Release key done. Install the release APK from the GitHub release page and check it works; anything R8 broke is fixed in v0.1.1 (the v0.1.0 tag is never moved).
+
+## M6 tests (TalkBack, tablet, developer switch)
+1. TalkBack (Settings > Accessibility): on the Live tab each tile should read its name and state; double-tap opens it; the actions menu has "Tile size and layout". Alerts: each alert reads as one sentence; filter buttons say selected. Player: the timeline reads its position and the actions menu has back/forward steps and Go to live.
+2. Tablet or a wide window (the emulator's tablet, 840 dp or more): Alerts shows the list with a preview panel; tapping an alert (or a mouse pointing at it) plays a slideshow of stills; tap the picture or Open to open the player. Settings > Alert preview panel turns it off. Settings, Server status, Log, Activity, About and Legend stay in a centred column.
+3. Settings > Developer > Show group layout: open a group in the player and check the outlines (green shown, red hidden).

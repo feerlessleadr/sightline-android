@@ -1,3 +1,5 @@
+import java.util.Properties
+
 plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.compose)
@@ -25,12 +27,48 @@ android {
         versionName = appVersion
     }
 
+    // Release signing. The key is never in the repository: the release workflow passes it in environment variables
+    // (from GitHub secrets), and a local build can read keystore.properties (git-ignored) in the project folder.
+    // See docs/release.md. Without either, the release build is simply left unsigned.
+    val keystoreProps = Properties().apply {
+        val file = rootProject.file("keystore.properties")
+        if (file.exists()) file.inputStream().use { load(it) }
+    }
+    fun signingValue(env: String, prop: String): String? = System.getenv(env)?.takeIf { it.isNotBlank() } ?: keystoreProps.getProperty(prop)
+    val releaseStoreFile = signingValue("SIGNING_STORE_FILE", "storeFile")
+    val releaseSigningReady = releaseStoreFile != null && file(releaseStoreFile).exists() &&
+        signingValue("SIGNING_STORE_PASSWORD", "storePassword") != null &&
+        signingValue("SIGNING_KEY_ALIAS", "keyAlias") != null &&
+        signingValue("SIGNING_KEY_PASSWORD", "keyPassword") != null
+
+    signingConfigs {
+        if (releaseSigningReady) {
+            create("release") {
+                storeFile = file(releaseStoreFile!!)
+                storePassword = signingValue("SIGNING_STORE_PASSWORD", "storePassword")
+                keyAlias = signingValue("SIGNING_KEY_ALIAS", "keyAlias")
+                keyPassword = signingValue("SIGNING_KEY_PASSWORD", "keyPassword")
+            }
+        }
+    }
+
     buildTypes {
         release {
             isMinifyEnabled = true
             isShrinkResources = true
             proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
-            // No signing config yet: release signing is set up before the first published release.
+            signingConfig = when {
+                releaseSigningReady -> signingConfigs.getByName("release")
+                // For trying the shrunk release build on a phone before there is a real key: -PreleaseDebugSigned=true.
+                // It gets its own app id (.rtest), so it sits next to the debug build and can never be mistaken for, or
+                // stop the install of, the real signed release (Android refuses an update signed with a different key).
+                findProperty("releaseDebugSigned") == "true" -> {
+                    applicationIdSuffix = ".rtest"
+                    versionNameSuffix = "-rtest"
+                    signingConfigs.getByName("debug")
+                }
+                else -> null
+            }
         }
         debug {
             applicationIdSuffix = ".debug"

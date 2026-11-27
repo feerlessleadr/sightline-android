@@ -13,6 +13,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
@@ -58,6 +59,12 @@ import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.role
+import androidx.compose.ui.semantics.selected
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.sp
 import com.feerlessleadr.sightline.data.AlertClips
 import com.feerlessleadr.sightline.data.AlertFilters
@@ -94,6 +101,8 @@ class AlertsActions(
     val lookFurtherBack: () -> Unit,
     val retry: () -> Unit,
     val thumbnail: suspend (path: String) -> ByteArray?,
+    /** A still picture of [camera] at a moment, for the alert preview panel; null if Blue Iris has none. */
+    val frame: suspend (camera: String, positionMs: Long) -> ByteArray?,
     val open: (AlertItem) -> Unit,
     val changeFlags: suspend (path: String, before: Long, after: Long) -> Unit,
     val retainFilters: (allowed: List<String>) -> Unit,
@@ -123,6 +132,8 @@ fun AlertsTab(
     cameras: List<Camera>,
     listState: LazyListState,
     actions: AlertsActions,
+    /** The alert preview panel beside the list on wide screens (Settings > Alert preview panel). */
+    previewOn: Boolean = false,
 ) {
     LaunchedEffect(Unit) {
         actions.ensureLoaded()
@@ -137,6 +148,10 @@ fun AlertsTab(
     val nameOf: (String) -> String = { camera -> names[camera.lowercase()] ?: camera }
     var showRange by remember { mutableStateOf(false) }
     var markTarget by remember { mutableStateOf<AlertItem?>(null) }
+    // Wide screens (a tablet): the list on the left and a preview of the chosen alert on the right.
+    val wide = previewOn && androidx.compose.ui.platform.LocalConfiguration.current.screenWidthDp >= 840
+    var previewPath by androidx.compose.runtime.saveable.rememberSaveable { mutableStateOf<String?>(null) }
+    val previewAlert = if (wide) ui.items.firstOrNull { it.path == previewPath } ?: ui.items.firstOrNull() else null
     var refreshing by remember { mutableStateOf(false) }
     val loading by androidx.compose.runtime.rememberUpdatedState(ui.loading)
     LaunchedEffect(refreshing) {
@@ -159,7 +174,8 @@ fun AlertsTab(
         if (nearEnd && ui.items.isNotEmpty() && !ui.loading && !ui.exhausted) actions.loadMore()
     }
 
-    Column(Modifier.fillMaxSize()) {
+    Row(Modifier.fillMaxSize()) {
+    Column(Modifier.weight(1f).fillMaxHeight()) {
         Row(
             Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 6.dp),
             verticalAlignment = Alignment.CenterVertically,
@@ -209,7 +225,9 @@ fun AlertsTab(
                             flags = ui.flagsOf(row.alert),
                             cameraName = nameOf(row.alert.camera),
                             thumbnail = actions.thumbnail,
-                            onClick = { actions.open(row.alert) },
+                            selected = wide && row.alert.path == previewAlert?.path,
+                            onHover = if (wide) ({ previewPath = row.alert.path }) else null,
+                            onClick = { if (wide) previewPath = row.alert.path else actions.open(row.alert) },
                             onLongClick = { markTarget = row.alert },
                         )
                     }
@@ -219,6 +237,18 @@ fun AlertsTab(
                 item { Footer(ui, actions) }
             }
         }
+    }
+    if (wide) {
+        AlertPreviewPanel(
+            alert = previewAlert,
+            flags = previewAlert?.let { ui.flagsOf(it) } ?: 0L,
+            cameraName = previewAlert?.let { nameOf(it.camera) }.orEmpty(),
+            frame = actions.frame,
+            thumbnail = actions.thumbnail,
+            onOpen = actions.open,
+            modifier = Modifier.weight(1f).fillMaxHeight().padding(12.dp),
+        )
+    }
     }
 
     if (showRange) {
@@ -270,7 +300,8 @@ private fun FilterPill(text: String, selected: Boolean, onClick: () -> Unit, onL
             .clip(shape)
             .background(if (selected) Sl.Accent.copy(alpha = 0.16f) else Color.Transparent)
             .border(1.dp, if (selected) Sl.Accent else Sl.Line, shape)
-            .combinedClickable(onClick = onClick, onLongClick = onLongClick)
+            .combinedClickable(onClick = onClick, onLongClick = onLongClick, onLongClickLabel = "Add to the selection")
+            .semantics { role = Role.Button; this.selected = selected }
             .padding(horizontal = 14.dp, vertical = 8.dp),
         contentAlignment = Alignment.Center,
     ) {
@@ -310,17 +341,36 @@ private fun AlertCard(
     flags: Long,
     cameraName: String,
     thumbnail: suspend (String) -> ByteArray?,
+    selected: Boolean,
+    onHover: (() -> Unit)?,
     onClick: () -> Unit,
     onLongClick: () -> Unit,
 ) {
     val locale = androidx.compose.ui.platform.LocalConfiguration.current.locales[0]
     val tags = remember(alert) { AlertTags.of(alert.memo, alert.flags) }
+    val summary = remember(alert, flags, cameraName, locale) {
+        listOf(tags.joinToString(", ") { it.text }, cameraName, SimpleDateFormat("h:mm a", locale).format(Date(alert.timeMs)), durationText(AlertClips.durationMillis(alert.fileSize)),
+            if (AlertFlags.has(flags, AlertFlags.FLAGGED)) "flagged" else "", if (AlertFlags.has(flags, AlertFlags.PROTECTED)) "protected" else "")
+            .filter { it.isNotEmpty() }.joinToString(", ")
+    }
     Row(
         Modifier
             .fillMaxWidth()
             .clip(RoundedCornerShape(12.dp))
-            .background(Sl.Surface)
-            .combinedClickable(onClick = onClick, onLongClick = onLongClick),
+            .background(if (selected) Sl.Surface2 else Sl.Surface)
+            .then(
+                if (onHover == null) Modifier else Modifier.pointerInput(Unit) {
+                    awaitPointerEventScope {
+                        while (true) {
+                            val event = awaitPointerEvent()
+                            // A mouse pointing at an alert previews it (touch uses a tap).
+                            if (event.type == androidx.compose.ui.input.pointer.PointerEventType.Enter && event.changes.firstOrNull()?.type == androidx.compose.ui.input.pointer.PointerType.Mouse) onHover()
+                        }
+                    }
+                },
+            )
+            .semantics(mergeDescendants = true) { contentDescription = summary }
+            .combinedClickable(onClick = onClick, onClickLabel = "Play this alert", onLongClick = onLongClick, onLongClickLabel = "Flag or protect"),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Box(Modifier.width(128.dp).height(76.dp).background(Sl.Surface2)) {
@@ -558,7 +608,7 @@ private fun rangeText(r: AlertRange): String {
         (if (sameDay) "" else dayLabel(r.endSec * 1000) + " ") + clock.format(Date(r.endSec * 1000))
 }
 
-private fun durationText(ms: Long): String {
+internal fun durationText(ms: Long): String {
     val s = Math.round(ms / 1000.0)
     return "${s / 60}:${(s % 60).toString().padStart(2, '0')}"
 }
