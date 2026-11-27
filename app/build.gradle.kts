@@ -17,7 +17,7 @@ val appVersionCode: Int = appVersion.split(".").let { parts ->
 
 android {
     namespace = "com.feerlessleadr.sightline"
-    compileSdk = 37
+    compileSdk { version = release(37) { minorApiLevel = 1 } }
 
     defaultConfig {
         applicationId = "com.feerlessleadr.sightline"
