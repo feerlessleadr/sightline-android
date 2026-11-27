@@ -7,7 +7,7 @@ Last updated: 2026-11-25
 - M1 (sign-in, camera list), M2 (live view) and M3 (player) are done and owner-verified on a phone: recorded playback and timeline, calendar, alert clip files, audio, tap/double tap/full screen/landscape, swipe between cameras, frame step, motion boxes, group view, pinch zoom, flag/protect, download an alert as MP4.
 - Also done and owner-verified: download a clip with a chosen start and end, Settings > Downloads > Save downloads to (needed a newer Fragment library), pull to refresh instead of the header refresh button.
 - Built, NOT yet seen on a phone: the player restarts its decoder when a recording changes picture size part-way (committed).
-- **v0.1.2 published (2026-11-27): new lens logo and updated libraries (Compose 1.13, AGP 9.5, OkHttp 5.5); both Dependabot pull requests merged; compileSdk 37.1. Previous: v0.1.1 (tag on 8960918). Not yet tried on devices: TalkBack, tablet behaviour, the updated libraries.**
+- **v0.1.3 published (2026-11-27): header uses the lens logo, server name no longer black. Previous: v0.1.2 (lens launcher icon, library updates). Not yet tried on devices: TalkBack, tablet behaviour, the updated libraries.**
 - Docs: `docs/feature-parity.md` (matrix), `docs/blue-iris-api.md` (API notes), `DECISIONS.md`.
 
 ## Feature target

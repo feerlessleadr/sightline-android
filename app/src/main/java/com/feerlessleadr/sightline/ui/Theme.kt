@@ -1,8 +1,10 @@
 package com.feerlessleadr.sightline.ui
 
+import androidx.compose.material3.LocalContentColor
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.darkColorScheme
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.ui.graphics.Color
 
 /**
@@ -56,5 +58,8 @@ private val SlColors = darkColorScheme(
 
 @Composable
 fun SightlineTheme(content: @Composable () -> Unit) {
-    MaterialTheme(colorScheme = SlColors, content = content)
+    MaterialTheme(colorScheme = SlColors) {
+        // Text outside a Surface or Scaffold (the app header, for one) would otherwise default to black on the dark background.
+        CompositionLocalProvider(LocalContentColor provides Sl.Text, content = content)
+    }
 }

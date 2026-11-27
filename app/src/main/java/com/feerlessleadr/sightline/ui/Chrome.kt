@@ -43,13 +43,18 @@ import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.WindowInsetsControllerCompat
 
-/** The Sightline mark: a blue ring with a white centre. */
+/** The Sightline mark (the lens): two blue rings, a red live dot and a small highlight, the same as the launcher icon. */
 @Composable
 fun SlLogo(size: Dp = 28.dp) {
     Canvas(Modifier.size(size)) {
-        val stroke = this.size.minDimension * 0.16f
-        drawCircle(Sl.Accent, radius = (this.size.minDimension - stroke) / 2f, style = Stroke(stroke))
-        drawCircle(Color.White, radius = this.size.minDimension * 0.17f)
+        val s = this.size.minDimension
+        val c = Offset(s / 2f, s / 2f)
+        val outer = s * 0.07f
+        drawCircle(Sl.Accent, radius = s / 2f - outer / 2f, center = c, style = Stroke(outer))
+        drawCircle(Sl.Accent.copy(alpha = 0.55f), radius = s * 0.29f, center = c, style = Stroke(s * 0.055f))
+        drawCircle(Color(0xFFFF4D6A), radius = s * 0.13f, center = c)
+        val r = s * 0.40f
+        drawArc(Color.White.copy(alpha = 0.7f), startAngle = 221f, sweepAngle = 39f, useCenter = false, topLeft = Offset(c.x - r, c.y - r), size = Size(2 * r, 2 * r), style = Stroke(s * 0.045f, cap = StrokeCap.Round))
     }
 }
 
@@ -208,7 +213,7 @@ fun SightlineHeader(serverName: String, onFullScreen: () -> Unit, onMenu: () -> 
         SlLogo()
         Column(Modifier.weight(1f)) {
             Text("SIGHTLINE FOR BLUE IRIS", fontSize = 10.sp, letterSpacing = 1.sp, color = Sl.Muted, maxLines = 1)
-            Text(serverName, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold, maxLines = 1)
+            Text(serverName, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold, color = Sl.Text, maxLines = 1)
         }
         IconAction(Glyph.FullScreen, "Full screen", onClick = onFullScreen)
         IconAction(Glyph.Menu, "Menu", onClick = onMenu)

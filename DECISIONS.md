@@ -582,3 +582,8 @@ Append-only, newest at the bottom. Never rewrite history; reverse a decision wit
 - **Decision**: Added a `protect-release-tags` ruleset (no delete, update or force-move of `v*` tags); turned on immutable releases (the release workflow already attaches files at creation); fork pull request workflows need approval for all outside contributors; pinned every GitHub Action to a commit hash (Dependabot keeps them current) and turned on "require actions pinned to a full commit hash".
 - **Options considered, not done**: requiring pull requests or passing CI on `main` (would block the owner's direct pushes); secret scanning generic patterns and validity checks (would not enable through the API, possibly a plan limit).
 - **Impact**: `.github/workflows/*`, repo settings. New third-party actions must be added by commit hash.
+
+### 2026-11-27, Header logo and text colour (v0.1.3)
+- **Context**: The in-app header still drew the old ring-and-dot logo, and the server name was black on the dark header because text outside a Surface has no content colour.
+- **Decision**: `SlLogo` now draws the lens (same as the launcher icon). `SightlineTheme` provides `LocalContentColor = Sl.Text` so uncoloured text is light everywhere; the header's server name also sets its colour.
+- **Impact**: `Chrome.kt`, `Theme.kt`. Released as v0.1.3.
