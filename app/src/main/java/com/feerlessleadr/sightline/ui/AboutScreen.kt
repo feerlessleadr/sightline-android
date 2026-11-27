@@ -50,7 +50,7 @@ fun AboutScreen(session: SessionState, username: String, onOpenUrl: (String) -> 
     Scaffold(
         topBar = { TopAppBar(title = { Text("About") }, navigationIcon = { TextButton(onClick = onBack) { Text("Back") } }) },
     ) { padding ->
-        Column(Modifier.fillMaxSize().padding(padding).verticalScroll(rememberScrollState()).padding(horizontal = 16.dp)) {
+        Column(Modifier.fillMaxSize().padding(padding).readable().verticalScroll(rememberScrollState()).padding(horizontal = 16.dp)) {
             Text("Sightline for Android", style = MaterialTheme.typography.headlineSmall, color = Sl.Text)
             Text("Version ${BuildConfig.VERSION_NAME} · for Blue Iris", color = Sl.Muted, style = MaterialTheme.typography.bodyMedium)
             Column(Modifier.padding(top = 12.dp)) {

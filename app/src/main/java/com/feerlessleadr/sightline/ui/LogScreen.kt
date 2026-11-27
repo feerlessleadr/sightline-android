@@ -86,7 +86,7 @@ fun LogScreen(
             )
         },
     ) { padding ->
-        Column(Modifier.fillMaxSize().padding(padding)) {
+        Column(Modifier.fillMaxSize().padding(padding).readable()) {
             when (val r = result) {
                 null -> Text(
                     if (loading) "Loading…" else "Can’t reach Blue Iris right now. Pull Refresh to try again.",

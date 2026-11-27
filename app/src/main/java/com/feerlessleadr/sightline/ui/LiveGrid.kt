@@ -53,6 +53,13 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.semantics.CustomAccessibilityAction
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.customActions
+import androidx.compose.ui.semantics.onClick
+import androidx.compose.ui.semantics.role
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.lifecycle.Lifecycle
@@ -349,6 +356,12 @@ fun LiveGrid(
                                 else IntOffset(box.x.roundToInt(), box.y.roundToInt())
                             }
                             .size(with(density) { box.w.toDp() }, with(density) { box.h.toDp() })
+                            .semantics {
+                                contentDescription = tileDescription(cam, aiLabels, aiTags[cam.optionValue.lowercase()], nowMs)
+                                role = Role.Button
+                                onClick(label = "Open camera") { onOpenCamera(cam); true }
+                                customActions = listOf(CustomAccessibilityAction("Tile size and layout") { sheetFor = cam; true })
+                            }
                             .tileGestures(
                                 onTap = { onOpenCamera(cam) },
                                 onLongPress = {
@@ -612,4 +625,17 @@ fun classColor(cls: AlertClass): Color = when (cls) {
     AlertClass.Animal -> Sl.Animal
     AlertClass.Delivery -> Sl.Delivery
     AlertClass.Motion -> Sl.Motion
+}
+
+/** What a screen reader says for a camera tile: its name and, if any, what is happening on it. */
+private fun tileDescription(cam: Camera, aiLabels: Boolean, aiTag: CameraTag?, nowMs: Long): String {
+    val triggered = cam.isTriggered || cam.isAlerting
+    val state = when {
+        !cam.online -> "no signal"
+        triggered -> "triggered"
+        cam.isMotion -> "motion"
+        else -> ""
+    }
+    val ai = if (aiLabels && aiTag != null && aiTag.isFresh(nowMs, triggered)) aiTag.tag.text else ""
+    return listOf(cam.displayName, state, ai).filter { it.isNotEmpty() }.joinToString(", ")
 }

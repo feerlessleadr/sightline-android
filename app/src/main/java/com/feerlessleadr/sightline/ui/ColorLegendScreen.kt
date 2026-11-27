@@ -28,6 +28,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.semantics.semantics
 
 private enum class Shape { Mark, Box, Block, Playhead, Dot, Border }
 
@@ -70,11 +71,11 @@ fun ColorLegendScreen(onBack: () -> Unit) {
     Scaffold(
         topBar = { TopAppBar(title = { Text("Colour legend") }, navigationIcon = { TextButton(onClick = onBack) { Text("Back") } }) },
     ) { padding ->
-        Column(Modifier.fillMaxSize().padding(padding).verticalScroll(rememberScrollState()).padding(horizontal = 16.dp)) {
+        Column(Modifier.fillMaxSize().padding(padding).readable().verticalScroll(rememberScrollState()).padding(horizontal = 16.dp)) {
             for ((title, entries) in sections) {
                 Text(title.uppercase(), style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.primary, modifier = Modifier.padding(top = 16.dp, bottom = 4.dp))
                 for (e in entries) {
-                    Row(Modifier.fillMaxWidth().padding(vertical = 7.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(14.dp)) {
+                    Row(Modifier.fillMaxWidth().semantics(mergeDescendants = true) { }.padding(vertical = 7.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(14.dp)) {
                         Box(Modifier.width(34.dp), contentAlignment = Alignment.Center) { Swatch(e) }
                         Column {
                             Text(e.title, color = Sl.Text, fontWeight = FontWeight.SemiBold)

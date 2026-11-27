@@ -37,6 +37,11 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.onClick
+import androidx.compose.ui.semantics.role
+import androidx.compose.ui.semantics.semantics
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
@@ -129,6 +134,11 @@ fun PopupBox(
                 .fillMaxWidth()
                 .aspectRatio(16f / 9f)
                 .background(Color.Black)
+                .semantics {
+                    contentDescription = "Picture from ${camera.displayName}"
+                    role = Role.Button
+                    onClick(label = "Open camera") { onOpen(); true }
+                }
                 .pointerInput(Unit) {
                     detectTapGestures(
                         onPress = {

@@ -116,6 +116,7 @@ class MainActivity : FragmentActivity() {
                         lookFurtherBack = viewModel.alerts::lookFurtherBack,
                         retry = viewModel.alerts::retry,
                         thumbnail = viewModel::alertThumbnail,
+                        frame = viewModel::alertFrame,
                         open = { alert ->
                             val camera = viewModel.state.value.session?.cameras?.cameras?.firstOrNull { it.optionValue.equals(alert.camera, ignoreCase = true) }
                             if (camera != null) {
@@ -232,6 +233,7 @@ class MainActivity : FragmentActivity() {
                         onQuality = viewModel::setQuality,
                         onBack = { liveCamera = null; alertToPlay = null },
                         initialAlert = alertToPlay,
+                        groupDebug = session.groupDebug,
                     ) }
                     session != null && showLegend -> com.feerlessleadr.sightline.ui.ColorLegendScreen(onBack = { showLegend = false })
                     session != null && showAbout -> com.feerlessleadr.sightline.ui.AboutScreen(
@@ -291,6 +293,8 @@ class MainActivity : FragmentActivity() {
                         onAbout = { showAbout = true },
                         onLegend = { showLegend = true },
                         onShowHidden = viewModel::setShowHidden,
+                        onGroupDebug = viewModel::setGroupDebug,
+                        onAlertPreview = viewModel::setAlertPreview,
                         onToggleGroup = viewModel::toggleGroup,
                         onOpenWebPage = { viewModel.webPageUrl()?.let(::openInBrowser) ?: android.widget.Toast.makeText(this@MainActivity, "Can't make the web page address. Check the file name in Settings.", android.widget.Toast.LENGTH_LONG).show() },
                         onWebPage = viewModel::setWebPage,

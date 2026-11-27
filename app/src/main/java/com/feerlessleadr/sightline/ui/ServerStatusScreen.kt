@@ -99,7 +99,7 @@ fun ServerStatusScreen(
             )
         },
     ) { padding ->
-        Column(Modifier.fillMaxSize().padding(padding).verticalScroll(rememberScrollState()).padding(horizontal = 14.dp)) {
+        Column(Modifier.fillMaxSize().padding(padding).readable().verticalScroll(rememberScrollState()).padding(horizontal = 14.dp)) {
             Text(
                 listOfNotNull(serverName, version?.let { "Blue Iris $it" }).joinToString(" · "),
                 color = Sl.Muted,

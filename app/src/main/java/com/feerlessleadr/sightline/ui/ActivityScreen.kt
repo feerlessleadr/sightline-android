@@ -33,6 +33,8 @@ import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.sp
 import com.feerlessleadr.sightline.data.ActivityFeed
 import com.feerlessleadr.sightline.data.ActivityReport
@@ -75,7 +77,7 @@ fun ActivityScreen(
     Scaffold(
         topBar = { TopAppBar(title = { Text("Activity") }, navigationIcon = { TextButton(onClick = onBack) { Text("Back") } }) },
     ) { padding ->
-        Column(Modifier.fillMaxSize().padding(padding).verticalScroll(rememberScrollState()).padding(horizontal = 14.dp)) {
+        Column(Modifier.fillMaxSize().padding(padding).readable().verticalScroll(rememberScrollState()).padding(horizontal = 14.dp)) {
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 for (d in listOf(7, 14, 30)) FilterChip(selected = ui.days == d, onClick = { feed.setDays(d) }, label = { Text("$d days") })
             }
@@ -109,7 +111,7 @@ fun ActivityScreen(
             val maxDay = maxOf(1, report.days.maxOf { it.total })
             val step = if (ui.days > 14) 5 else if (ui.days > 7) 2 else 1
             val dayFormat = remember(locale, ui.days) { DateTimeFormatter.ofPattern(if (ui.days == 7) "EEE" else "M/d", locale) }
-            Canvas(Modifier.fillMaxWidth().height(110.dp)) {
+            Canvas(Modifier.fillMaxWidth().height(110.dp).semantics { contentDescription = "Alerts per day, oldest first: " + report.days.joinToString(", ") { it.total.toString() } }) {
                 val n = report.days.size
                 val slot = size.width / n
                 val barW = slot * 0.7f
@@ -170,7 +172,7 @@ private fun Title(text: String) {
 
 @Composable
 private fun HeatRow(name: String, hours: IntArray, total: Int, max: Int, onClick: () -> Unit, bold: Boolean = false) {
-    Row(Modifier.fillMaxWidth().clickable(onClick = onClick).padding(vertical = 2.dp), verticalAlignment = Alignment.CenterVertically) {
+    Row(Modifier.fillMaxWidth().clickable(onClickLabel = "Show its alerts", onClick = onClick).semantics(mergeDescendants = true) { contentDescription = "$name, $total alerts" }.padding(vertical = 2.dp), verticalAlignment = Alignment.CenterVertically) {
         Text(name, color = if (bold) Sl.Accent else Sl.Text, fontSize = 12.sp, maxLines = 1, modifier = Modifier.width(NAME_W).padding(end = 4.dp))
         for (n in hours) {
             val alpha = if (n > 0) 0.12f + 0.88f * sqrt(n.toFloat() / maxOf(1, max)) else 0f

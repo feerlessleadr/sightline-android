@@ -71,6 +71,8 @@ fun SettingsScreen(
     onAbout: () -> Unit,
     onLegend: () -> Unit,
     onShowHidden: (Boolean) -> Unit,
+    onGroupDebug: (Boolean) -> Unit,
+    onAlertPreview: (Boolean) -> Unit,
     onToggleGroup: (String) -> Boolean,
     onOpenWebPage: () -> Unit,
     onWebPage: (String) -> Boolean,
@@ -92,7 +94,7 @@ fun SettingsScreen(
             )
         },
     ) { padding ->
-        Column(Modifier.fillMaxSize().padding(padding).verticalScroll(rememberScrollState())) {
+        Column(Modifier.fillMaxSize().padding(padding).readable().verticalScroll(rememberScrollState())) {
             Section("Live view")
             SwitchRow(
                 "Live video in camera tiles",
@@ -106,6 +108,9 @@ fun SettingsScreen(
             ChoiceRow("Motion box sensitivity", "${session.motionSensitivity} of 10 · ${MotionSensitivity.describe(session.motionSensitivity)}") { dialog = "sensitivity" }
             ChoiceRow("Pop up on detection", session.popup.summary()) { dialog = "popup" }
             SwitchRow("Show hidden cameras", "Cameras marked Hidden in Blue Iris. Disabled cameras are never shown.", session.showHidden, onShowHidden)
+            if (androidx.compose.ui.platform.LocalConfiguration.current.screenWidthDp >= 840) {
+                SwitchRow("Alert preview panel", "On a wide screen, a slideshow of stills from the chosen alert beside the Alerts list", session.alertPreview, onAlertPreview)
+            }
             run {
                 val all = session.cameras?.groups.orEmpty()
                 val shown = all.shownGroups(session.hiddenGroups)
@@ -158,6 +163,7 @@ fun SettingsScreen(
             ChoiceRow("Web page file name", session.webPage) { dialog = "webpage" }
             ActionRow("Sign out", null, onSignOut)
             Section("Developer")
+            SwitchRow("Show group layout", "Troubleshooting: in a group view, shows Blue Iris's picture as it is with each camera outlined (green shown, red hidden)", session.groupDebug, onGroupDebug)
             ActionRow(
                 "Test video start",
                 if (probing) "Running… (about a minute)" else "Opens one camera several ways and times each, to find what slows video down",
