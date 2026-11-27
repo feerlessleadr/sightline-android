@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- A simple eye: outline plus a pupil, inside the adaptive icon's safe zone. -->
+<!-- Lens logo: an aperture (two rings) with a red live dot and a small highlight, inside the adaptive icon's safe zone. -->
 <vector xmlns:android="http://schemas.android.com/apk/res/android"
     android:width="108dp"
     android:height="108dp"
@@ -7,11 +7,23 @@
     android:viewportHeight="108">
     <path
         android:fillColor="#00000000"
-        android:pathData="M24,54 Q54,28 84,54 Q54,80 24,54 Z"
+        android:pathData="M54,54m-27,0a27,27 0,1 1,54 0a27,27 0,1 1,-54 0"
         android:strokeColor="#4FC3F7"
-        android:strokeLineJoin="round"
-        android:strokeWidth="5" />
+        android:strokeWidth="4" />
     <path
-        android:fillColor="#4FC3F7"
-        android:pathData="M54,54m-9,0a9,9 0,1 1,18 0a9,9 0,1 1,-18 0" />
+        android:fillColor="#00000000"
+        android:pathData="M54,54m-16,0a16,16 0,1 1,32 0a16,16 0,1 1,-32 0"
+        android:strokeAlpha="0.55"
+        android:strokeColor="#4FC3F7"
+        android:strokeWidth="3" />
+    <path
+        android:fillColor="#FF4D6A"
+        android:pathData="M54,54m-7,0a7,7 0,1 1,14 0a7,7 0,1 1,-14 0" />
+    <path
+        android:fillColor="#00000000"
+        android:pathData="M38,40 A22,22 0 0 1 50,32"
+        android:strokeAlpha="0.7"
+        android:strokeColor="#FFFFFF"
+        android:strokeLineCap="round"
+        android:strokeWidth="3" />
 </vector>

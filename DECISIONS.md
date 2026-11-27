@@ -569,3 +569,10 @@ Append-only, newest at the bottom. Never rewrite history; reverse a decision wit
 - **Decision**: pushed the M6 code (49f2ef1) and the notes `docs/releases/v0.1.1.md` (8960918); CI on main passed first (tests, debug build, shrunk release build, lint). Tagged `v0.1.1` on 8960918. The Release workflow passed every check and published `sightline-android-v0.1.1.apk` (4.6 MB) with its checksum; APK SHA-256 `87b6a64b9c74488dbac622bff7ee3e28c989a617ad54fe342a180197eb3530df`, same pinned signing certificate as 0.1.0, so it installs over 0.1.0.
 - **Not merged**: the two Dependabot pull requests (1 for the GitHub Actions, CI green; 2 for Gradle libraries, needs a rebase and a phone check). Waiting for the owner's go-ahead.
 - **Unverified**: TalkBack and tablet behaviour on real devices.
+
+### 2026-11-27, New launcher logo: the lens
+- **Context**: The first logo was a plain eye outline. The owner asked for a redesign and was shown six options (lens, eye with play, playhead, viewfinder, S monogram, sightline beam).
+- **Options considered**: All six, drawn on the existing dark navy background.
+- **Decision**: Option 1, the lens: two cyan rings, a red live dot and a small highlight. A separate single-colour version (`ic_launcher_monochrome.xml`) is used for themed icons.
+- **Rationale**: Reads clearly at small sizes and the red dot matches the app's live colour.
+- **Impact**: `ic_launcher_foreground.xml`, new `ic_launcher_monochrome.xml`, `mipmap-anydpi/ic_launcher.xml`. Shipped in v0.1.2.
