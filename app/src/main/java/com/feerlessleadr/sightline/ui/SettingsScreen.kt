@@ -15,6 +15,7 @@ import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Scaffold
+import com.feerlessleadr.sightline.data.shownGroups
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -69,6 +70,8 @@ fun SettingsScreen(
     onActivity: () -> Unit,
     onAbout: () -> Unit,
     onLegend: () -> Unit,
+    onShowHidden: (Boolean) -> Unit,
+    onToggleGroup: (String) -> Boolean,
     onOpenWebPage: () -> Unit,
     onWebPage: (String) -> Boolean,
 ) {
@@ -102,6 +105,12 @@ fun SettingsScreen(
             SwitchRow("Motion boxes", "Draws a box around movement it finds by comparing pictures (uses a little more data: stills refresh faster)", session.motionBoxes, onMotionBoxes)
             ChoiceRow("Motion box sensitivity", "${session.motionSensitivity} of 10 · ${MotionSensitivity.describe(session.motionSensitivity)}") { dialog = "sensitivity" }
             ChoiceRow("Pop up on detection", session.popup.summary()) { dialog = "popup" }
+            SwitchRow("Show hidden cameras", "Cameras marked Hidden in Blue Iris. Disabled cameras are never shown.", session.showHidden, onShowHidden)
+            run {
+                val all = session.cameras?.groups.orEmpty()
+                val shown = all.shownGroups(session.hiddenGroups)
+                ChoiceRow("Groups on Live screen", if (all.isEmpty()) "None set up" else if (shown.size == all.size) "All shown" else shown.joinToString(", ") { it.displayName }) { dialog = "groups" }
+            }
             ActionRow("Reset layout for this view", "Back to Blue Iris's order, normal tiles and fit-to-screen size for the group shown", onResetLayout)
             ActionRow("Colour legend", "What the colours on tiles, alerts and the timeline mean", onLegend)
             Section("Video")
@@ -186,6 +195,7 @@ fun SettingsScreen(
         }
     }
     if (dialog == "popup") PopupSheet(session.popup, filterSettings, onPopup) { dialog = null }
+    if (dialog == "groups") GroupsSheet(session.cameras?.groups.orEmpty(), session.hiddenGroups, onToggleGroup) { dialog = null }
     if (dialog == "webpage") WebPageDialog(session.webPage, onWebPage) { dialog = null }
     when (dialog) {
         "quality" -> ChoiceDialog(

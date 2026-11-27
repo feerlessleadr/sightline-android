@@ -49,6 +49,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import com.feerlessleadr.sightline.data.Camera
+import com.feerlessleadr.sightline.data.shownGroups
 import com.feerlessleadr.sightline.data.VideoStream
 import com.feerlessleadr.sightline.video.StreamRequest
 
@@ -94,7 +95,7 @@ fun CameraListScreen(
                 HomeTab.Alerts -> AlertsTab(
                     ui = alerts,
                     groups = session.cameras?.groups.orEmpty(),
-                    cameras = session.cameras?.visibleCameras(null).orEmpty(),
+                    cameras = session.cameras?.visibleCameras(null, session.showHidden).orEmpty(),
                     listState = alertsListState,
                     actions = alertsActions,
                 )
@@ -132,7 +133,7 @@ private fun LiveTab(
     var aiTags by remember { mutableStateOf<Map<String, CameraTag>>(emptyMap()) }
     var nowMs by remember { mutableLongStateOf(System.currentTimeMillis()) }
     val shown by rememberUpdatedState(
-        session.cameras?.cameras?.filter { it.isEnabled && !it.hidden }?.map { it.optionValue.lowercase() }?.toSet().orEmpty(),
+        session.cameras?.cameras?.filter { it.isEnabled && (!it.hidden || session.showHidden) }?.map { it.optionValue.lowercase() }?.toSet().orEmpty(),
     )
     LaunchedEffect(wantsStatus) {
         lifecycle.repeatOnLifecycle(Lifecycle.State.STARTED) {
@@ -175,9 +176,9 @@ private fun LiveTab(
             }
         }
         val list = session.cameras
-        val groups = list?.groups.orEmpty()
+        val groups = list?.groups.orEmpty().shownGroups(session.hiddenGroups)
         val selected = groups.firstOrNull { it.optionValue == session.selectedGroup }
-            ?: groups.firstOrNull { it.optionValue == "index" }
+            ?: groups.firstOrNull { it.optionValue == "index" } ?: groups.firstOrNull()
         val groupKey = selected?.optionValue ?: "index"
         val size = session.tileSizes[groupKey] ?: TileSize.Auto
         if (!fullScreen) {
@@ -224,7 +225,7 @@ private fun LiveTab(
             }
         }
         PullToRefreshBox(isRefreshing = refreshing, onRefresh = { refreshing = true; onRefresh() }, modifier = Modifier.fillMaxSize()) {
-            val cameras = list?.visibleCameras(selected).orEmpty()
+            val cameras = list?.visibleCameras(selected, session.showHidden).orEmpty()
             if (session.loading && list == null) {
                 CircularProgressIndicator(Modifier.align(Alignment.Center))
             } else if (cameras.isEmpty() && !session.loading) {
@@ -256,8 +257,8 @@ private fun LiveTab(
         }
     }
     val allCameras = session.cameras
-    val shownGroup = allCameras?.groups.orEmpty().let { g -> g.firstOrNull { it.optionValue == session.selectedGroup } ?: g.firstOrNull { it.optionValue == "index" } }
-    val gridCameras = allCameras?.visibleCameras(shownGroup).orEmpty()
+    val shownGroup = allCameras?.groups.orEmpty().shownGroups(session.hiddenGroups).let { g -> g.firstOrNull { it.optionValue == session.selectedGroup } ?: g.firstOrNull { it.optionValue == "index" } ?: g.firstOrNull() }
+    val gridCameras = allCameras?.visibleCameras(shownGroup, session.showHidden).orEmpty()
     SideEffect { gridNames = gridCameras.map { it.optionValue.lowercase() }.toSet() }
     val popupCamera = popupEvent?.let { ev -> allCameras?.cameras?.firstOrNull { it.optionValue.equals(ev.camera, ignoreCase = true) } }
     if (popupEvent != null && popupCamera != null) {

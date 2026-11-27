@@ -93,6 +93,10 @@ data class SessionState(
     val popup: PopupConfig = PopupConfig(),
     /** The file name of the web version of Sightline on the Blue Iris server (Settings > Account). */
     val webPage: String = com.feerlessleadr.sightline.data.WebLink.DEFAULT_PAGE,
+    /** Show cameras marked Hidden in Blue Iris (disabled ones never show). */
+    val showHidden: Boolean = false,
+    /** Group buttons the owner hid from the Live screen (stored as hidden, so groups added later show by default). */
+    val hiddenGroups: Set<String> = emptySet(),
     /** Sound in the player (on or muted) and its volume, 0 to 2 (1 is normal). */
     val soundOn: Boolean = true,
     val volume: Float = 1f,
@@ -484,7 +488,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         scope = viewModelScope,
         fetch = { camera, startSec, endSec -> guarded { it.cameraAlerts(camera, startSec * 1000, endSec * 1000) } },
         shown = { name ->
-            _state.value.session?.cameras?.cameras?.any { it.optionValue.equals(name, ignoreCase = true) && it.isEnabled && !it.hidden } ?: true
+            _state.value.session?.cameras?.cameras?.any { it.optionValue.equals(name, ignoreCase = true) && it.isEnabled && (!it.hidden || _state.value.session?.showHidden == true) } ?: true
         },
     )
 
@@ -502,7 +506,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         scope = viewModelScope,
         fetch = { camera, startSec, endSec -> guarded { it.cameraAlerts(camera, startSec * 1000, endSec * 1000) } },
         shown = { name ->
-            _state.value.session?.cameras?.cameras?.any { it.optionValue.equals(name, ignoreCase = true) && it.isEnabled && !it.hidden } ?: true
+            _state.value.session?.cameras?.cameras?.any { it.optionValue.equals(name, ignoreCase = true) && it.isEnabled && (!it.hidden || _state.value.session?.showHidden == true) } ?: true
         },
     )
 
@@ -511,7 +515,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         scope = viewModelScope,
         fetch = { camera, startSec, endSec -> guarded { it.cameraAlerts(camera, startSec * 1000, endSec * 1000) } },
         shown = { name ->
-            _state.value.session?.cameras?.cameras?.any { it.optionValue.equals(name, ignoreCase = true) && it.isEnabled && !it.hidden } ?: true
+            _state.value.session?.cameras?.cameras?.any { it.optionValue.equals(name, ignoreCase = true) && it.isEnabled && (!it.hidden || _state.value.session?.showHidden == true) } ?: true
         },
         load = { AlertFilterConfig.decode(prefs.getString(KEY_ALERT_FILTERS, null)) },
         save = { prefs.edit().putString(KEY_ALERT_FILTERS, it.encode()).apply() },
@@ -587,6 +591,8 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         downloadFolderName = prefs.getString(KEY_DOWNLOAD_FOLDER, null)?.let { folderName(android.net.Uri.parse(it)) },
         popup = PopupConfig.decode(prefs.getString(KEY_POPUP, null)),
         webPage = com.feerlessleadr.sightline.data.WebLink.clean(prefs.getString(KEY_WEB_PAGE, null)) ?: com.feerlessleadr.sightline.data.WebLink.DEFAULT_PAGE,
+        showHidden = prefs.getBoolean(KEY_SHOW_HIDDEN, false),
+        hiddenGroups = prefs.getStringSet(KEY_HIDDEN_GROUPS, emptySet()).orEmpty().toSet(),
         soundOn = prefs.getBoolean(KEY_SOUND_ON, true),
         volume = prefs.getFloat(KEY_VOLUME, 1f).coerceIn(0f, 2f),
         motionSensitivity = prefs.getInt(KEY_MOTION_SENS, 5).coerceIn(1, 10),
@@ -616,6 +622,27 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         val value = level.coerceIn(1, 10)
         prefs.edit().putInt(KEY_MOTION_SENS, value).apply()
         _state.update { s -> s.session?.let { s.copy(session = it.copy(motionSensitivity = value)) } ?: s }
+    }
+
+    /** Shows or hides cameras Blue Iris marks Hidden; what was counted from the camera set is forgotten. */
+    fun setShowHidden(on: Boolean) {
+        prefs.edit().putBoolean(KEY_SHOW_HIDDEN, on).apply()
+        _state.update { s -> s.session?.let { s.copy(session = it.copy(showHidden = on)) } ?: s }
+        alerts.clear()
+        alertFilters.clear()
+        activity.clear()
+    }
+
+    /** Shows or hides a group button on the Live screen; false (nothing changed) if it would leave none. */
+    fun toggleGroup(id: String): Boolean {
+        val session = _state.value.session ?: return false
+        val all = session.cameras?.groups.orEmpty().map { it.optionValue }
+        val hidden = session.hiddenGroups
+        val next = if (id in hidden) hidden - id else hidden + id
+        if (all.none { it !in next }) return false
+        prefs.edit().putStringSet(KEY_HIDDEN_GROUPS, next).apply()
+        _state.update { s -> s.session?.let { s.copy(session = it.copy(hiddenGroups = next)) } ?: s }
+        return true
     }
 
     /** Saves the web page file name; false if it is not allowed (see [com.feerlessleadr.sightline.data.WebLink]). */
@@ -1188,6 +1215,8 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         const val KEY_ALERT_FILTERS = "alert_filters"
         const val KEY_POPUP = "popup_config"
         const val KEY_WEB_PAGE = "web_page"
+        const val KEY_SHOW_HIDDEN = "show_hidden"
+        const val KEY_HIDDEN_GROUPS = "hidden_groups"
         const val KEY_ADDRESS = "address"
         const val KEY_USER = "username"
         const val KEY_TILE_SIZE = "tile_size_"
@@ -1223,8 +1252,8 @@ fun SessionState.playerCameras(current: String): List<Camera> {
     }
     val group = list.groups.firstOrNull { it.optionValue == selectedGroup } ?: list.groups.firstOrNull { it.optionValue == "index" }
     val key = group?.optionValue ?: "index"
-    val shown = (arrangements[key] ?: GroupArrangement()).sorted(list.visibleCameras(group)) { it.optionValue }
-    return if (shown.any { it.optionValue == current }) shown else list.visibleCameras(null)
+    val shown = (arrangements[key] ?: GroupArrangement()).sorted(list.visibleCameras(group, showHidden)) { it.optionValue }
+    return if (shown.any { it.optionValue == current }) shown else list.visibleCameras(null, showHidden)
 }
 
 /**
@@ -1245,6 +1274,6 @@ fun SessionState.groupFor(current: String): Camera? {
 /** The camera to go back to from the group [group]: the one the group view was opened from, else the first shown camera of the group. */
 fun SessionState.cameraToReturnTo(group: Camera, openedFrom: String?): Camera? {
     val list = cameras ?: return null
-    val shown = list.visibleCameras(group)
+    val shown = list.visibleCameras(group, showHidden)
     return shown.firstOrNull { it.optionValue == openedFrom } ?: shown.firstOrNull()
 }

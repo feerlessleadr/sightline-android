@@ -214,7 +214,7 @@ class MainActivity : FragmentActivity() {
                         },
                         groupTarget = if (live.isGroup) session.cameraToReturnTo(live, groupFrom) else session.groupFor(live.optionValue),
                         findCamera = { name ->
-                            session.cameras?.cameras?.firstOrNull { it.optionValue.equals(name, ignoreCase = true) && it.isEnabled && !it.hidden }
+                            session.cameras?.cameras?.firstOrNull { it.optionValue.equals(name, ignoreCase = true) && it.isEnabled && (!it.hidden || session.showHidden) }
                         },
                         motionBoxes = session.motionBoxes,
                         sensitivity = session.motionSensitivity,
@@ -289,6 +289,8 @@ class MainActivity : FragmentActivity() {
                         onActivity = { showActivity = true },
                         onAbout = { showAbout = true },
                         onLegend = { showLegend = true },
+                        onShowHidden = viewModel::setShowHidden,
+                        onToggleGroup = viewModel::toggleGroup,
                         onOpenWebPage = { viewModel.webPageUrl()?.let(::openInBrowser) ?: android.widget.Toast.makeText(this@MainActivity, "Can't make the web page address. Check the file name in Settings.", android.widget.Toast.LENGTH_LONG).show() },
                         onWebPage = viewModel::setWebPage,
                     )

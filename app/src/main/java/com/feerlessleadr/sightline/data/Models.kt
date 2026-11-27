@@ -156,3 +156,6 @@ data class AlertItem(
         }
     }
 }
+
+/** The group buttons to show on the Live screen: all but the ones the owner hid, and never none at all. */
+fun List<Camera>.shownGroups(hidden: Set<String>): List<Camera> = filter { it.optionValue !in hidden }.ifEmpty { this }
