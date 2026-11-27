@@ -1,0 +1,25 @@
+version: 2
+
+# Weekly pull requests for newer versions of the libraries (Gradle version catalog) and of the GitHub Actions the
+# workflows use. Nothing is merged by itself: each pull request is built by CI and looked at first.
+updates:
+  - package-ecosystem: gradle
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
+    open-pull-requests-limit: 5
+    groups:
+      # Small updates arrive together in one pull request; major ones stay separate so they get a proper look.
+      minor-and-patch:
+        update-types: [minor, patch]
+
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
+    open-pull-requests-limit: 5
+    groups:
+      actions:
+        patterns: ["*"]

@@ -27,6 +27,8 @@ data class AlertsUi(
     val error: String? = null,
     /** Flags changed on this phone, by record id, until the list is loaded again. */
     val flagOverrides: Map<String, Long> = emptyMap(),
+    /** Counts how many times the list was started again (a new filter, camera or time), so the screen can go back to the top. */
+    val reloads: Int = 0,
 ) {
     fun flagsOf(alert: AlertItem): Long = flagOverrides[AlertFlags.recordId(alert.path)] ?: alert.flags
 }
@@ -73,7 +75,7 @@ class AlertsFeed(
         val range = _state.value.range
         cursorSec = range?.endSec ?: (nowMs() / 1000 + 60)
         seen.clear()
-        _state.update { it.copy(items = emptyList(), loading = false, exhausted = false, end = AlertsEnd.None, error = null, flagOverrides = emptyMap()) }
+        _state.update { it.copy(items = emptyList(), loading = false, exhausted = false, end = AlertsEnd.None, error = null, flagOverrides = emptyMap(), reloads = it.reloads + 1) }
         loadMore()
     }
 

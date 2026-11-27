@@ -91,7 +91,7 @@ data class ServerStatus(
 }
 
 /** One camera row of the status screen: its frame rate and bit rate as Blue Iris reports them. */
-data class CameraRate(val name: String, val fps: Double, val mbps: Double, val state: String)
+data class CameraRate(val id: String, val name: String, val fps: Double, val mbps: Double, val state: String)
 
 /** The numbers on the Server status screen, worked out the way the web app does. */
 object ServerNumbers {
@@ -137,6 +137,6 @@ object ServerNumbers {
                     !it.online -> "no signal"
                     else -> ""
                 }
-                CameraRate(it.displayName, it.fps ?: 0.0, (it.bps ?: 0.0) * 8 / 1e6, state)
+                CameraRate(it.optionValue, it.displayName, it.fps ?: 0.0, (it.bps ?: 0.0) * 8 / 1e6, state)
             }
 }

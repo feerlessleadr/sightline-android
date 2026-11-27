@@ -7,7 +7,7 @@ Last updated: 2026-11-25
 - M1 (sign-in, camera list), M2 (live view) and M3 (player) are done and owner-verified on a phone: recorded playback and timeline, calendar, alert clip files, audio, tap/double tap/full screen/landscape, swipe between cameras, frame step, motion boxes, group view, pinch zoom, flag/protect, download an alert as MP4.
 - Also done and owner-verified: download a clip with a chosen start and end, Settings > Downloads > Save downloads to (needed a newer Fragment library), pull to refresh instead of the header refresh button.
 - Built, NOT yet seen on a phone: the player restarts its decoder when a recording changes picture size part-way (committed).
-- **M5: pop-ups, Server status, System log, Activity, About, web-page link and colour legend pushed (latest 1094dae). Show hidden cameras and Groups on Live screen built, NOT committed, not yet seen on a phone. Left in M5: "footage kept" on Server status. Alert preview panel moved to M6 (tablets).** M4b deep links built and verified on the phone (live, alert, alerts tab, URI button), NOT committed.** Format in notifications: `deep-link://sightline://live/<camera>` etc. (connection 17 in WORKSPACE.md). Next: change the HA automations (ha session), then M5.
+- **M5 done (latest pushed 1c9cb59). Built, NOT committed: "Footage kept" (M5), the Alerts-list scroll fix, and the M6 CI/CodeQL/Dependabot files. None seen on a phone or on GitHub yet.**
 - Docs: `docs/feature-parity.md` (matrix), `docs/blue-iris-api.md` (API notes), `DECISIONS.md`.
 
 ## Feature target
@@ -61,3 +61,10 @@ Settings > Live view > Colour legend: four groups (Alerts, Player timeline, Came
 
 ## Hidden cameras and groups test (M5)
 Settings > Live view: "Show hidden cameras" (turn on: cameras you marked Hidden in Blue Iris appear on the grid and in the Alerts camera menu; off: they go again). "Groups on Live screen": switch group buttons off (at least one stays; with one left the button row disappears) and check the Live tab follows.
+
+## Footage kept test (M5)
+Settings > Server > Server status: a "Footage kept" tile (shows ... then a range like 12-30 days) and a Stored column on each camera (a number of hours or days; * means older recordings after a gap). It fills in camera by camera, so give it a minute on a big server. Compare a camera's Stored value with how far back its timeline goes in the player.
+
+## Alerts scroll fix and M6 CI test
+1. Alerts tab: tap People, Vehicles, Animals, Flagged and All: the list should start at the NEWEST alert (top) each time, not jump to the oldest of today. Also try the camera menu and time button.
+2. GitHub (M6): after "commit and push" I will look at the first CI and CodeQL runs. You do on GitHub (Settings): Security > enable Dependabot alerts and security updates; do NOT also switch on CodeQL "default setup" (the workflow file does the job); optionally add a branch rule that requires the CI check before merging.

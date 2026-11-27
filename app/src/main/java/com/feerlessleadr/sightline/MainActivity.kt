@@ -263,6 +263,7 @@ class MainActivity : FragmentActivity() {
                         serverName = session.info.systemName,
                         version = session.info.version,
                         load = viewModel::serverView,
+                        retention = viewModel.retention,
                         onOpenLog = { logProblems = true; showLog = true },
                         onBack = { showServer = false },
                     )

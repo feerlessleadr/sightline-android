@@ -40,6 +40,10 @@ class AlertsFeedTest {
         val f = feed(fake)
         f.reload()
         assertEquals(listOf(2 * hour, 5 * hour), f.state.value.items.map { nowSec - it.timeMs / 1000 })
+        assertEquals(1, f.state.value.reloads)
+        f.select("people", combine = false)
+        assertEquals(2, f.state.value.reloads) // a new filter starts the list again
+        f.select(AlertFilters.ALL, combine = false)
         assertFalse(f.state.value.loading)
         f.loadMore()
         assertEquals(3, f.state.value.items.size)

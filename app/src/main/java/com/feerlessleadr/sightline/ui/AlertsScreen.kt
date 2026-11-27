@@ -153,6 +153,8 @@ fun AlertsTab(
             last >= listState.layoutInfo.totalItemsCount - 4
         }
     }
+    // A new filter, camera or time starts the list again from its newest alert.
+    LaunchedEffect(ui.reloads) { listState.scrollToItem(0) }
     LaunchedEffect(nearEnd, ui.items.size, ui.loading, ui.exhausted) {
         if (nearEnd && ui.items.isNotEmpty() && !ui.loading && !ui.exhausted) actions.loadMore()
     }
@@ -212,7 +214,9 @@ fun AlertsTab(
                         )
                     }
                 }
-                item(key = "footer") { Footer(ui, actions) }
+                // No key on purpose: a keyed footer is what the list holds on to while it is empty, so alerts arriving above it
+                // pushed the view down to the bottom of the day (and onto the oldest alert) after a filter change.
+                item { Footer(ui, actions) }
             }
         }
     }

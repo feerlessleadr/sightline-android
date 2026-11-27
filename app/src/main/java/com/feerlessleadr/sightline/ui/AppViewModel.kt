@@ -365,6 +365,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         alerts.clear()
         alertFilters.clear()
         activity.clear()
+        retention.clear()
         memoryCredentials = null
         downloadJob?.cancel()
         sessions.clear()
@@ -501,6 +502,12 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         null
     }
 
+    /** How far back each camera's recordings go (Server status). */
+    val retention = com.feerlessleadr.sightline.data.RetentionFeed(
+        scope = viewModelScope,
+        timeline = { camera, startMs, endMs, step -> guarded { it.timeline(camera, startMs, endMs, step) } },
+    )
+
     /** The Activity screen's alert counts. */
     val activity = com.feerlessleadr.sightline.data.ActivityFeed(
         scope = viewModelScope,
@@ -631,6 +638,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         alerts.clear()
         alertFilters.clear()
         activity.clear()
+        retention.clear()
     }
 
     /** Shows or hides a group button on the Live screen; false (nothing changed) if it would leave none. */
@@ -708,6 +716,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         alerts.clear()
         alertFilters.clear()
         activity.clear()
+        retention.clear()
         memoryCredentials = null
         downloadJob?.cancel() // a download does not go on after signing out
         sessions.clear()
@@ -771,6 +780,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         alerts.clear()
         alertFilters.clear()
         activity.clear()
+        retention.clear()
         sessions.clear()
         if (neverModeNow()) {
             // "Never" lock: just sign in again with the saved password.

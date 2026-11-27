@@ -42,6 +42,9 @@ import androidx.lifecycle.repeatOnLifecycle
 import com.feerlessleadr.sightline.data.Camera
 import com.feerlessleadr.sightline.data.DiskInfo
 import com.feerlessleadr.sightline.data.ServerNumbers
+import com.feerlessleadr.sightline.data.Retention
+import com.feerlessleadr.sightline.data.RetentionFeed
+import androidx.compose.runtime.collectAsState
 import com.feerlessleadr.sightline.data.ServerStatus
 import java.text.SimpleDateFormat
 import java.util.Date
@@ -57,13 +60,19 @@ fun ServerStatusScreen(
     serverName: String?,
     version: String?,
     load: suspend () -> Pair<ServerStatus, List<Camera>>?,
+    retention: RetentionFeed,
     onOpenLog: () -> Unit,
     onBack: () -> Unit,
 ) {
     var status by remember { mutableStateOf<ServerStatus?>(null) }
     var cameras by remember { mutableStateOf<List<Camera>>(emptyList()) }
     var live by remember { mutableStateOf(true) }
+    val ret by retention.state.collectAsState()
     val lifecycle = LocalLifecycleOwner.current.lifecycle
+    // How far back each camera goes: one long request per camera, started once the camera list is in (not again within 10 minutes).
+    LaunchedEffect(cameras.isNotEmpty()) {
+        if (cameras.isNotEmpty()) retention.refresh(ServerNumbers.rates(cameras).filter { it.state != "disabled" }.map { it.id })
+    }
     LaunchedEffect(Unit) {
         lifecycle.repeatOnLifecycle(Lifecycle.State.STARTED) {
             while (true) {
@@ -139,6 +148,12 @@ fun ServerStatusScreen(
                 Tile("Connections", s.connections?.toString() ?: "?", "To the web server", null),
                 Tile("Warnings", s.warnings.toString(), if (s.warnings > 0) "Open the system log" else "Nothing new", null, warn = s.warnings > 0, onClick = onOpenLog),
                 Tile(
+                    "Footage kept",
+                    Retention.range(ret.byCamera.values, System.currentTimeMillis()) ?: if (ret.busy) "…" else "?",
+                    if (ret.byCamera.size > 1) "Range across cameras" else if (ret.byCamera.isEmpty()) "Checking each camera" else "Oldest recording",
+                    null,
+                ),
+                Tile(
                     "Profile",
                     s.profile ?: "?",
                     listOfNotNull(
@@ -166,7 +181,8 @@ fun ServerStatusScreen(
                 Row(Modifier.fillMaxWidth().padding(vertical = 4.dp)) {
                     Text("Camera", color = Sl.Muted, style = MaterialTheme.typography.labelMedium, modifier = Modifier.weight(1f))
                     Text("fps", color = Sl.Muted, style = MaterialTheme.typography.labelMedium, modifier = Modifier.width(64.dp), textAlign = TextAlign.End)
-                    Text("Mbps", color = Sl.Muted, style = MaterialTheme.typography.labelMedium, modifier = Modifier.width(64.dp), textAlign = TextAlign.End)
+                    Text("Mbps", color = Sl.Muted, style = MaterialTheme.typography.labelMedium, modifier = Modifier.width(56.dp), textAlign = TextAlign.End)
+                    Text("Stored", color = Sl.Muted, style = MaterialTheme.typography.labelMedium, modifier = Modifier.width(72.dp), textAlign = TextAlign.End)
                 }
             }
             for (c in rows) {
@@ -176,10 +192,28 @@ fun ServerStatusScreen(
                         Text(c.state, color = Sl.Faint, style = MaterialTheme.typography.bodySmall)
                     } else {
                         Text(String.format(locale, "%.1f", c.fps), color = Sl.Text, modifier = Modifier.width(64.dp), textAlign = TextAlign.End)
-                        Text(String.format(locale, "%.2f", c.mbps), color = Sl.Text, modifier = Modifier.width(64.dp), textAlign = TextAlign.End)
+                        Text(String.format(locale, "%.2f", c.mbps), color = Sl.Text, modifier = Modifier.width(56.dp), textAlign = TextAlign.End)
+                        val kept = ret.byCamera[c.id]
+                        Text(
+                            when {
+                                kept == null -> if (ret.busy) "…" else ""
+                                kept.none -> "none"
+                                else -> Retention.kept(System.currentTimeMillis() - kept.fromMs) + if (kept.older) "*" else ""
+                            },
+                            color = Sl.Text,
+                            modifier = Modifier.width(72.dp),
+                            textAlign = TextAlign.End,
+                        )
                     }
                 }
             }
+            Text(
+                "Stored: how far back each camera’s recordings go, counted back from today until a gap of more than 2 days. Checked when this opens (every 10 minutes at most)." +
+                    if (ret.byCamera.values.any { it.older }) " * Also has older recordings after a gap, often protected clips." else "",
+                color = Sl.Muted,
+                style = MaterialTheme.typography.bodySmall,
+                modifier = Modifier.padding(top = 6.dp),
+            )
             Box(Modifier.height(24.dp))
         }
     }

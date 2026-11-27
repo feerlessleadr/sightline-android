@@ -1,5 +1,7 @@
 # Sightline for Android
 
+[![CI](https://github.com/feerlessleadr/sightline-android/actions/workflows/ci.yml/badge.svg)](https://github.com/feerlessleadr/sightline-android/actions/workflows/ci.yml)
+
 An Android app for viewing [Blue Iris](https://blueirissoftware.com/) live cameras, alerts and playback. It aims to match the features and interface of the web app [Sightline for Blue Iris](https://github.com/rw377/Sightline-for-Blue-Iris) as closely as Android allows.
 
 > **Unofficial.** Not affiliated with, endorsed by or supported by Perspective Software, the maker of Blue Iris, or by the author of the web Sightline. Blue Iris is a trademark of its owner.
