@@ -7,7 +7,7 @@ Last updated: 2026-11-25
 - M1 (sign-in, camera list), M2 (live view) and M3 (player) are done and owner-verified on a phone: recorded playback and timeline, calendar, alert clip files, audio, tap/double tap/full screen/landscape, swipe between cameras, frame step, motion boxes, group view, pinch zoom, flag/protect, download an alert as MP4.
 - Also done and owner-verified: download a clip with a chosen start and end, Settings > Downloads > Save downloads to (needed a newer Fragment library), pull to refresh instead of the header refresh button.
 - Built, NOT yet seen on a phone: the player restarts its decoder when a recording changes picture size part-way (committed).
-- **M5 done (latest pushed 1c9cb59). Built, NOT committed: "Footage kept" (M5), the Alerts-list scroll fix, and the M6 CI/CodeQL/Dependabot files. None seen on a phone or on GitHub yet.**
+- **M5 done. M6 started: CI and CodeQL are live and passing on GitHub (49628d1). Two Dependabot pull requests are open (1 for the actions, 2 for Gradle) and not merged. Still to do in M6: release signing, tablet layouts (with the Alert preview panel), accessibility, the two hidden developer switches.**
 - Docs: `docs/feature-parity.md` (matrix), `docs/blue-iris-api.md` (API notes), `DECISIONS.md`.
 
 ## Feature target

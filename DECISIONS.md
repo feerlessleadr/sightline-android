@@ -527,3 +527,10 @@ Append-only, newest at the bottom. Never rewrite history; reverse a decision wit
 - **Not done**: actions are pinned by version tag (`@v4`, `@v3`), not by full commit hash, because I cannot look up hashes from here; the Dependabot actions update will keep the tags current, and pinning by hash can be done later. No branch protection or required checks yet (the owner sets those on GitHub).
 - **Unverified**: the workflows have not run (they only run once pushed). The first run may need a fix, for example if the runner lacks the SDK platform 37 the build asks for.
 - **Impact**: `.github/` (new); README badge. Release signing, tablets and accessibility are still to do in M6.
+
+### 2026-11-27, First CI and CodeQL runs
+- **Context**: Pushed a5f88e3 (CI, CodeQL, Dependabot). Both workflows failed in about 20 s.
+- **What failed and why**: `android-actions/setup-android@v3` accepts the SDK licences and then installs its default package list, `tools platform-tools`; the package `tools` no longer exists, so the step exited with an error. Fix (49628d1): ask for `platform-tools` only, in both workflows.
+- **Result**: after the fix CI passed (about 5 minutes: wrapper check, tests, debug build, lint) and CodeQL passed (the Kotlin analysis ran and uploaded). The SDK platform 37 the build needs was fetched by Gradle without trouble.
+- **Warnings seen**: Node 20 deprecation for the actions (they run on Node 24 anyway); `setup-java@v4` is deprecated in favour of v5; CodeQL Action v3 is deprecated from December 2026 in favour of v4. Dependabot's first pull request for the actions group (#1) proposes these bumps.
+- **Dependabot**: it opened two pull requests at once: #1 (GitHub Actions, 5 updates) and #2 (Gradle minor and patch, 7 updates). #2's checks failed only because its branch was cut before the setup fix; it needs a rebase onto main. Neither is merged: each needs a look first (a Gradle bump can change the build or app behaviour and must be tried on the phone).
