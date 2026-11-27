@@ -68,6 +68,7 @@ fun SettingsScreen(
     onSystemLog: () -> Unit,
     onActivity: () -> Unit,
     onAbout: () -> Unit,
+    onLegend: () -> Unit,
     onOpenWebPage: () -> Unit,
     onWebPage: (String) -> Boolean,
 ) {
@@ -102,6 +103,7 @@ fun SettingsScreen(
             ChoiceRow("Motion box sensitivity", "${session.motionSensitivity} of 10 · ${MotionSensitivity.describe(session.motionSensitivity)}") { dialog = "sensitivity" }
             ChoiceRow("Pop up on detection", session.popup.summary()) { dialog = "popup" }
             ActionRow("Reset layout for this view", "Back to Blue Iris's order, normal tiles and fit-to-screen size for the group shown", onResetLayout)
+            ActionRow("Colour legend", "What the colours on tiles, alerts and the timeline mean", onLegend)
             Section("Video")
             ChoiceRow("Video quality", "${session.quality.label} · ${session.quality.note}") { dialog = "quality" }
             Section("Downloads")

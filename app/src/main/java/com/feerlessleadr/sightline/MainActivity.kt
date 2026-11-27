@@ -133,6 +133,7 @@ class MainActivity : FragmentActivity() {
                 var showLog by rememberSaveable { mutableStateOf(false) }
                 var showActivity by rememberSaveable { mutableStateOf(false) }
                 var showAbout by rememberSaveable { mutableStateOf(false) }
+                var showLegend by rememberSaveable { mutableStateOf(false) }
                 var logProblems by rememberSaveable { mutableStateOf(false) }
                 // Leaving the signed-in state (sign-out, lock, expired session) also leaves these screens.
                 LaunchedEffect(session == null) {
@@ -143,6 +144,7 @@ class MainActivity : FragmentActivity() {
                         showLog = false
                         showActivity = false
                         showAbout = false
+                        showLegend = false
                     }
                 }
                 // The player shows a camera, or a whole group (which Blue Iris offers as one combined picture).
@@ -159,6 +161,7 @@ class MainActivity : FragmentActivity() {
                     showLog = false
                     showActivity = false
                     showAbout = false
+                    showLegend = false
                     groupFrom = null
                     val cams = session.cameras?.cameras.orEmpty()
                     fun find(name: String) = cams.firstOrNull { it.optionValue.equals(name, ignoreCase = true) && it.isEnabled }
@@ -193,6 +196,7 @@ class MainActivity : FragmentActivity() {
                 BackHandler(enabled = live == null && showLog) { showLog = false }
                 BackHandler(enabled = live == null && showActivity) { showActivity = false }
                 BackHandler(enabled = live == null && showAbout) { showAbout = false }
+                BackHandler(enabled = live == null && showLegend) { showLegend = false }
 
                 when {
                     // Keyed so that a link to another alert on the same camera starts the player afresh.
@@ -229,6 +233,7 @@ class MainActivity : FragmentActivity() {
                         onBack = { liveCamera = null; alertToPlay = null },
                         initialAlert = alertToPlay,
                     ) }
+                    session != null && showLegend -> com.feerlessleadr.sightline.ui.ColorLegendScreen(onBack = { showLegend = false })
                     session != null && showAbout -> com.feerlessleadr.sightline.ui.AboutScreen(
                         session = session,
                         username = state.form.username,
@@ -241,6 +246,7 @@ class MainActivity : FragmentActivity() {
                         onShowAlerts = { camera, type ->
                             showActivity = false
                             showAbout = false
+                            showLegend = false
                             showSettings = false
                             viewModel.alerts.setCamera(camera)
                             viewModel.alerts.select(type, false)
@@ -282,6 +288,7 @@ class MainActivity : FragmentActivity() {
                         onSystemLog = { logProblems = false; showLog = true },
                         onActivity = { showActivity = true },
                         onAbout = { showAbout = true },
+                        onLegend = { showLegend = true },
                         onOpenWebPage = { viewModel.webPageUrl()?.let(::openInBrowser) ?: android.widget.Toast.makeText(this@MainActivity, "Can't make the web page address. Check the file name in Settings.", android.widget.Toast.LENGTH_LONG).show() },
                         onWebPage = viewModel::setWebPage,
                     )

@@ -20,7 +20,7 @@ Status: **Done**, **Partial**, **Planned (Mn)**, **N/A** (with the reason). "And
 | Bottom tab bar: Live, Alerts | Done: bar built; the Alerts tab is a placeholder until M4 |
 | Bottom sheets for every popup, system Back closes popups then the player | Done for choice popups (M2 round 2); player popups in M3 |
 | Sign-in card with logo, username, password, "Stay signed in" checkbox | Done: restyled card (M2 round 2); "Stay signed in" is our fingerprint/PIN "Remember me" (Android) |
-| Colour legend sheet | Planned (M5) |
+| Colour legend sheet | Built (M5): Settings > Colour legend |
 | Add to home screen / install files in `www` / uninstall | N/A: native app |
 | Keyboard shortcuts (space, `,` `.`, arrows, `+` `-` `0`, `F`, Esc) | N/A on phones; maybe for hardware keyboards later (M6) |
 
