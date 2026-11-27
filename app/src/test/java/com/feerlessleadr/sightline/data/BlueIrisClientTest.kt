@@ -416,4 +416,29 @@ class BlueIrisClientTest {
         client.downloadExport("Clipboard\\FrontDrive.20261125_193758715Z-193859Z.5.mp4", java.io.ByteArrayOutputStream()) { _, _ -> }
         assertEquals("/clips/Clipboard/FrontDrive.20261125_193758715Z-193859Z.5.mp4", server.takeRequest().path)
     }
+
+    @Test fun `a server supplied path that climbs out of its folder is refused before any request`() = runBlocking {
+        signedInClient()
+        val before = server.requestCount
+        for (bad in listOf("../json", "Export/../../admin", "Export\\..\\x.mp4", "./x.mp4", "..")) {
+            try {
+                client.downloadExport(bad, java.io.ByteArrayOutputStream()) { _, _ -> }
+                fail("accepted $bad")
+            } catch (e: BlueIrisException) {
+                // expected
+            }
+        }
+        for (bad in listOf("..", ".")) {
+            try { client.openClip(bad, 0L, 100); fail("accepted clip $bad") } catch (e: BlueIrisException) { }
+            try { client.still(bad); fail("accepted camera $bad") } catch (e: BlueIrisException) { }
+            try { client.recordedStill(bad, 0L); fail("accepted camera $bad") } catch (e: BlueIrisException) { }
+        }
+        assertEquals(before, server.requestCount)
+    }
+
+    @Test fun `names with dots inside are still allowed`() {
+        requireSafePath("Export/9.mp4")
+        requireSafePath("Clipboard\\Front.Drive..5.mp4")
+        requireSafePath("@100.bvr")
+    }
 }

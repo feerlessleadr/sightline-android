@@ -587,3 +587,9 @@ Append-only, newest at the bottom. Never rewrite history; reverse a decision wit
 - **Context**: The in-app header still drew the old ring-and-dot logo, and the server name was black on the dark header because text outside a Surface has no content colour.
 - **Decision**: `SlLogo` now draws the lens (same as the launcher icon). `SightlineTheme` provides `LocalContentColor = Sl.Text` so uncoloured text is light everywhere; the header's server name also sets its colour.
 - **Impact**: `Chrome.kt`, `Theme.kt`. Released as v0.1.3.
+
+### 2026-11-27, Security review fixes (v0.1.4)
+- **Context**: The owner asked for a full security review. No critical or high findings. Two were fixed; the owner chose to fix only these.
+- **Decision**: (1) Removed the `QueryToken` probe variant from "Test video start": it put the session token in the URL, which proxy and server logs keep, against the rule that tokens never go in URLs. (2) Added `requireSafePath` in `BlueIrisClient`: camera names and file paths from Blue Iris (live, recorded, still, clip file, export download) are refused if any `/` or `\` separated part is `.` or `..`, because OkHttp resolves those and a hostile reply could redirect the authenticated request to another path on the same host. Tests added.
+- **Not done (owner's call)**: hide camera pictures in the Recents card and screenshots (FLAG_SECURE or `setRecentsScreenshotEnabled(false)`); wording check on the "Never lock" warning; certificate pinning; check of the stream header length limit at `BlueStreamReader.kt:43`; dependency vulnerability check.
+- **Impact**: `Settings.kt`, `BlueIrisClient.kt`, `BlueIrisClientTest.kt`, `docs/releases/v0.1.4.md`. Released as v0.1.4.

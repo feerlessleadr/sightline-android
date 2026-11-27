@@ -26,7 +26,6 @@ enum class VideoQuality(val label: String, val shortSide: Int?, val note: String
 enum class ProbeVariant(val label: String) {
     Cookie("As the app does now (cookie, compression allowed)"),
     Identity("No compression"),
-    QueryToken("Session in the address (like the web app)"),
     Http11("HTTP/1.1 only"),
     Bare("No size or quality settings"),
     Browser("Browser-like headers"),

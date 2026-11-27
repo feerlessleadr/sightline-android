@@ -7,7 +7,8 @@ Last updated: 2026-11-27
 - M1 (sign-in, camera list), M2 (live view) and M3 (player) are done and owner-verified on a phone: recorded playback and timeline, calendar, alert clip files, audio, tap/double tap/full screen/landscape, swipe between cameras, frame step, motion boxes, group view, pinch zoom, flag/protect, download an alert as MP4.
 - Also done and owner-verified: download a clip with a chosen start and end, Settings > Downloads > Save downloads to (needed a newer Fragment library), pull to refresh instead of the header refresh button.
 - Built, NOT yet seen on a phone: the player restarts its decoder when a recording changes picture size part-way (committed).
-- **v0.1.3 published (2026-11-27): header uses the lens logo, server name no longer black. Previous: v0.1.2 (lens launcher icon, library updates). Not yet tried on devices: TalkBack, tablet behaviour, the updated libraries.**
+- **v0.1.4 (security fixes: no session token in URLs, unsafe file names refused) being released 2026-11-27. Previous: v0.1.3 (lens logo in header), v0.1.2. Not yet tried on devices: TalkBack, tablet behaviour, the updated libraries.**
+- Security review done 2026-11-27 (see DECISIONS.md); open item for the owner: hide camera pictures in Recents and screenshots (not done).
 - Docs: `docs/feature-parity.md` (matrix), `docs/blue-iris-api.md` (API notes), `DECISIONS.md`.
 
 ## Feature target

@@ -50,6 +50,17 @@ class VideoStream internal constructor(private val response: Response) : java.io
     override fun close() = response.close()
 }
 
+/**
+ * A name or file path that Blue Iris supplied (camera short name, recording file, export file) goes into a web address,
+ * and OkHttp resolves `.` and `..` there. Refuse them, so a wrong or hostile reply can never steer the signed-in request
+ * to another path on the server.
+ */
+internal fun requireSafePath(value: String) {
+    if (value.split('/', '\\').any { it == "." || it == ".." }) {
+        throw BlueIrisException("Blue Iris sent a file name that is not safe to use.")
+    }
+}
+
 /** Sends the Blue Iris session as a cookie for this one host, so the token never goes into a URL. */
 internal class SessionCookieJar(private val host: String) : CookieJar {
     @Volatile
@@ -224,6 +235,7 @@ class BlueIrisClient(
      */
     suspend fun downloadExport(uri: String, out: java.io.OutputStream, onProgress: (done: Long, total: Long) -> Unit) {
         if (session == null) throw SessionExpiredException()
+        requireSafePath(uri)
         // Blue Iris names the file the way Windows does (`Clipboard\Camera.2026....mp4`); a web address needs slashes.
         val url = baseUrl.newBuilder().addPathSegment("clips").addPathSegments(uri.replace('\\', '/').trimStart('/')).build()
         val streaming = http.newBuilder().callTimeout(0, TimeUnit.SECONDS).readTimeout(30, TimeUnit.SECONDS).build()
@@ -284,6 +296,7 @@ class BlueIrisClient(
      */
     suspend fun still(camera: String, width: Int = 480, quality: Int = 60, group: Boolean = false): ByteArray {
         if (session == null) throw SessionExpiredException()
+        requireSafePath(camera)
         val url = baseUrl.newBuilder()
             .addPathSegment("image")
             .addPathSegment(camera)
@@ -340,6 +353,7 @@ class BlueIrisClient(
      */
     suspend fun recordedStill(camera: String, positionMs: Long, width: Int = 960, group: Boolean = false): ByteArray {
         if (session == null) throw SessionExpiredException()
+        requireSafePath(camera)
         val url = baseUrl.newBuilder()
             .addPathSegment("time")
             .addPathSegment(camera)
@@ -462,6 +476,7 @@ class BlueIrisClient(
         group: Boolean = false,
     ): VideoStream {
         if (session == null) throw SessionExpiredException()
+        segments.forEach { requireSafePath(it) }
         val url = baseUrl.newBuilder()
             .apply { segments.forEach { addPathSegment(it) } }
             .addQueryParameter("audio", if (audio) "1" else "0")
@@ -511,12 +526,13 @@ class BlueIrisClient(
      * "Test video start" tool in Settings to find out what slows a stream down. Returns one line of text.
      */
     suspend fun probeVideo(camera: String, size: StreamRequest, variant: ProbeVariant): String {
-        val token = session ?: throw SessionExpiredException()
+        if (session == null) throw SessionExpiredException()
+        requireSafePath(camera)
+        // The session only ever travels in the cookie, never in the address (proxy and server logs keep addresses).
         val url = baseUrl.newBuilder()
             .addPathSegment("video")
             .addPathSegment(camera)
             .addPathSegment("2.0")
-            .apply { if (variant == ProbeVariant.QueryToken) addQueryParameter("session", token) }
             .addQueryParameter("audio", "0")
             .addQueryParameter("stream", "0")
             .apply {
