@@ -7,7 +7,7 @@ Last updated: 2026-11-25
 - M1 (sign-in, camera list), M2 (live view) and M3 (player) are done and owner-verified on a phone: recorded playback and timeline, calendar, alert clip files, audio, tap/double tap/full screen/landscape, swipe between cameras, frame step, motion boxes, group view, pinch zoom, flag/protect, download an alert as MP4.
 - Also done and owner-verified: download a clip with a chosen start and end, Settings > Downloads > Save downloads to (needed a newer Fragment library), pull to refresh instead of the header refresh button.
 - Built, NOT yet seen on a phone: the player restarts its decoder when a recording changes picture size part-way (committed).
-- **v0.1.0 published (2026-11-27). M6 code finished (built, NOT committed, untested on devices): developer group-layout switch, accessibility pass, large-screen layouts with the alert preview panel. Two Dependabot pull requests still open: 1 (actions, CI green, mergeable) and 2 (Gradle, needs a rebase). Next release would be v0.1.1.**
+- **v0.1.1 published (2026-11-27, tag on 8960918). M6 code done. Open: Dependabot pull request 1 (actions, CI green, mergeable) and 2 (Gradle libraries, needs a rebase and a phone check) are not merged and wait for the owner. Not yet tried on devices: TalkBack and tablet behaviour.**
 - Docs: `docs/feature-parity.md` (matrix), `docs/blue-iris-api.md` (API notes), `DECISIONS.md`.
 
 ## Feature target
