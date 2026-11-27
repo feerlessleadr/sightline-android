@@ -40,8 +40,9 @@ jobs:
       - name: Make the Gradle wrapper runnable
         run: chmod +x ./gradlew
 
-      - name: Unit tests, debug build and lint
-        run: ./gradlew test assembleDebug lintDebug --stacktrace
+      # assembleRelease runs R8 (the shrinker), so a problem it causes shows up here and not on the first release.
+      - name: Unit tests, debug and release builds, and lint
+        run: ./gradlew test assembleDebug assembleRelease lintDebug --stacktrace
 
       # Reports are only kept when something fails, to see why.
       - name: Keep the reports if the build failed

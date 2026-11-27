@@ -7,7 +7,7 @@ Last updated: 2026-11-25
 - M1 (sign-in, camera list), M2 (live view) and M3 (player) are done and owner-verified on a phone: recorded playback and timeline, calendar, alert clip files, audio, tap/double tap/full screen/landscape, swipe between cameras, frame step, motion boxes, group view, pinch zoom, flag/protect, download an alert as MP4.
 - Also done and owner-verified: download a clip with a chosen start and end, Settings > Downloads > Save downloads to (needed a newer Fragment library), pull to refresh instead of the header refresh button.
 - Built, NOT yet seen on a phone: the player restarts its decoder when a recording changes picture size part-way (committed).
-- **M5 done. M6 started: CI and CodeQL are live and passing on GitHub (49628d1). Two Dependabot pull requests are open (1 for the actions, 2 for Gradle) and not merged. Still to do in M6: release signing, tablet layouts (with the Alert preview panel), accessibility, the two hidden developer switches.**
+- **M5 done. M6: CI and CodeQL live and passing (49628d1); release signing and the release workflow built (not committed). Two Dependabot pull requests open and not merged. Still to do in M6: tablet layouts (with the Alert preview panel), accessibility, the two hidden developer switches.**
 - Docs: `docs/feature-parity.md` (matrix), `docs/blue-iris-api.md` (API notes), `DECISIONS.md`.
 
 ## Feature target
@@ -68,3 +68,7 @@ Settings > Server > Server status: a "Footage kept" tile (shows ... then a range
 ## Alerts scroll fix and M6 CI test
 1. Alerts tab: tap People, Vehicles, Animals, Flagged and All: the list should start at the NEWEST alert (top) each time, not jump to the oldest of today. Also try the camera menu and time button.
 2. GitHub (M6): after "commit and push" I will look at the first CI and CodeQL runs. You do on GitHub (Settings): Security > enable Dependabot alerts and security updates; do NOT also switch on CodeQL "default setup" (the workflow file does the job); optionally add a branch rule that requires the CI check before merging.
+
+## Release build test (M6)
+1. Install the shrunk release test build and use the app for a few minutes (live, player, alerts, settings, a download): `.gradlew.bat assembleRelease "-PreleaseDebugSigned=true"`, then install appbuildoutputspkeleasepp-release.apk. It installs as `com.feerlessleadr.sightline.rtest` next to the debug build (you sign in again). Tell me anything that works in debug but not here: that is R8 removing something.
+2. Release key: DONE. Made, four GitHub secrets set, certificate fingerprint pinned in release.yml. Left before v0.1.0: your check of the .rtest build on the phone, then you say publish it and I write docs/releases/v0.1.0.md; the v0.1.0 tag then makes the release.
