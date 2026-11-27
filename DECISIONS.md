@@ -552,3 +552,9 @@ Append-only, newest at the bottom. Never rewrite history; reverse a decision wit
 - **Context**: The owner made the Sightline release key (`C:\keystore\sightline-android.jks`, alias `sightline`, PKCS12, RSA 4096) and set the four `SIGNING_*` GitHub secrets (all four confirmed listed). Claude saw none of them.
 - **Decision**: the certificate SHA-256 the owner read from the key, `f35be2138ec75521a0d9a76a1f6c3cb6b36a37be36263823ad3ade394fb00d8b` (public), is pinned as `EXPECTED_CERT_SHA256` in `.github/workflows/release.yml`. The workflow fails for any APK signed with another certificate.
 - **Impact**: `release.yml`. Still needed before the first release: `docs/releases/v0.1.0.md` (written when the owner says publish it), the owner's check of the shrunk `.rtest` build on the phone, and the explicit "publish it".
+
+### 2026-11-27, v0.1.0 published
+- **Context**: The owner said "commit and push, then publish it". CI on main (including the shrunk release build) had passed first; the owner had not yet tried the `.rtest` build on a phone and chose to publish anyway.
+- **Decision**: pushed the signing work (0b834ed) and the notes `docs/releases/v0.1.0.md` (3f57737), then tagged `v0.1.0` on 3f57737. The Release workflow passed every check (key present, pinned certificate, v2 or v3 signature, package, version name `0.1.0`, version code `1000`) and published the release with `sightline-android-v0.1.0.apk` (4.6 MB) and its `.sha256`. APK SHA-256 `54387b91a3e45ca853a131464c3b94868dfdba473b7d643b116d02cf3860de0f`; signing certificate `f35be2138ec75521a0d9a76a1f6c3cb6b36a37be36263823ad3ade394fb00d8b`.
+- **Rule from now**: the `v0.1.0` tag made a public release, so it is never moved or deleted; a problem is fixed in `v0.1.1`.
+- **Unverified**: the signed release APK on a phone. If R8 broke something that debug does not show, it will show now; fix it in 0.1.1.
