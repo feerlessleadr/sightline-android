@@ -1,9 +1,9 @@
 ﻿# STATUS
 
-Last updated: 2026-11-25
+Last updated: 2026-11-27
 
 ## Current state
-- Public repo feerlessleadr/sightline-android (secret scanning, push protection, private vulnerability reporting, Dependabot alerts, `main` ruleset). GPL-3.0, HTTPS-only, minSdk 30 (Android 11+). Last pushed commit: e8be092 (clip range download, download folder, pull to refresh, size-change restart).
+- Public repo feerlessleadr/sightline-android (secret scanning, push protection, private vulnerability reporting, Dependabot alerts, `main` ruleset, release-tag ruleset, immutable releases, actions pinned to commit hashes). GPL-3.0, HTTPS-only, minSdk 30 (Android 11+). Last pushed commit: ce58d5b (v0.1.3; later commits are docs only if any).
 - M1 (sign-in, camera list), M2 (live view) and M3 (player) are done and owner-verified on a phone: recorded playback and timeline, calendar, alert clip files, audio, tap/double tap/full screen/landscape, swipe between cameras, frame step, motion boxes, group view, pinch zoom, flag/protect, download an alert as MP4.
 - Also done and owner-verified: download a clip with a chosen start and end, Settings > Downloads > Save downloads to (needed a newer Fragment library), pull to refresh instead of the header refresh button.
 - Built, NOT yet seen on a phone: the player restarts its decoder when a recording changes picture size part-way (committed).
@@ -14,9 +14,7 @@ Last updated: 2026-11-25
 Parity with the web app Sightline for Blue Iris (https://github.com/rw377/Sightline-for-Blue-Iris). Behaviour is the spec; no code is copied.
 
 ## Next steps
-1. M3 is finished (the older-Blue-Iris fallback and PTZ were dropped: the owner uses Blue Iris 6+ and has no PTZ cameras).
-2. M4 alerts tab: slice 1 built (see below); slice 2 = custom labels, Auto mode and label scan, filter settings sheet, custom start/end time, colour legend. Then M4b deep links from Home Assistant notifications (then edit the HA automations in the ha project), M5 settings/server/log/activity/pop-ups/About, M6 CI/CodeQL/Dependabot/signing/tablets/accessibility.
-3. Lint leftovers (warnings only): `SharedPreferences.edit` KTX suggestion, version bumps.
+1. M1 to M6 are all built and v0.1.3 is published (latest). Nothing is in progress and the working tree is clean.2. Very next action: owner tests on devices what has not been tried (TalkBack, tablet or wide window with the alert preview panel, Show group layout, system log with an admin user, footage kept on a large server, the updated libraries) and reports problems; fixes go into v0.1.4 (tags never move).3. Known gaps: no screen-reader way to reorder camera tiles, faint grey text is below the usual contrast target, no Smooth preview mode.4. Not done on purpose: requiring pull requests or CI on main (would block direct pushes); two secret-scanning extras would not enable (maybe a plan limit).5. Lint leftovers (warnings only): SharedPreferences.edit KTX suggestion.
 
 ## Owner must do
 - Picture-size change: nothing to do unless a recording from a camera that switches between its sub and main stream shows a corner of the picture or freezes at the switch; tell me the camera and time.
