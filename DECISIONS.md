@@ -576,3 +576,9 @@ Append-only, newest at the bottom. Never rewrite history; reverse a decision wit
 - **Decision**: Option 1, the lens: two cyan rings, a red live dot and a small highlight. A separate single-colour version (`ic_launcher_monochrome.xml`) is used for themed icons.
 - **Rationale**: Reads clearly at small sizes and the red dot matches the app's live colour.
 - **Impact**: `ic_launcher_foreground.xml`, new `ic_launcher_monochrome.xml`, `mipmap-anydpi/ic_launcher.xml`. Shipped in v0.1.2.
+
+### 2026-11-27, Repository security hardening
+- **Context**: Owner asked to make sure every sensible protection is applied before going further.
+- **Decision**: Added a `protect-release-tags` ruleset (no delete, update or force-move of `v*` tags); turned on immutable releases (the release workflow already attaches files at creation); fork pull request workflows need approval for all outside contributors; pinned every GitHub Action to a commit hash (Dependabot keeps them current) and turned on "require actions pinned to a full commit hash".
+- **Options considered, not done**: requiring pull requests or passing CI on `main` (would block the owner's direct pushes); secret scanning generic patterns and validity checks (would not enable through the API, possibly a plan limit).
+- **Impact**: `.github/workflows/*`, repo settings. New third-party actions must be added by commit hash.
