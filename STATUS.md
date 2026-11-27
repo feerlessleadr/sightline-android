@@ -7,7 +7,7 @@ Last updated: 2026-11-25
 - M1 (sign-in, camera list), M2 (live view) and M3 (player) are done and owner-verified on a phone: recorded playback and timeline, calendar, alert clip files, audio, tap/double tap/full screen/landscape, swipe between cameras, frame step, motion boxes, group view, pinch zoom, flag/protect, download an alert as MP4.
 - Also done and owner-verified: download a clip with a chosen start and end, Settings > Downloads > Save downloads to (needed a newer Fragment library), pull to refresh instead of the header refresh button.
 - Built, NOT yet seen on a phone: the player restarts its decoder when a recording changes picture size part-way (committed).
-- **M5: pop-ups (af5ce61), Server status (1dec0aa) and System log (916e485) pushed. Activity overview built, NOT committed, not yet seen on a phone.** M4b deep links built and verified on the phone (live, alert, alerts tab, URI button), NOT committed.** Format in notifications: `deep-link://sightline://live/<camera>` etc. (connection 17 in WORKSPACE.md). Next: change the HA automations (ha session), then M5.
+- **M5: pop-ups, Server status, System log, Activity pushed (latest 7540aaa). About and the web-page link built, NOT committed, not yet seen on a phone. Left in M5: colour legend, "footage kept".** M4b deep links built and verified on the phone (live, alert, alerts tab, URI button), NOT committed.** Format in notifications: `deep-link://sightline://live/<camera>` etc. (connection 17 in WORKSPACE.md). Next: change the HA automations (ha session), then M5.
 - Docs: `docs/feature-parity.md` (matrix), `docs/blue-iris-api.md` (API notes), `DECISIONS.md`.
 
 ## Feature target
@@ -52,3 +52,6 @@ Settings > Server > System log. With your normal (non-admin) Blue Iris user you 
 
 ## Activity test (M5)
 Settings > Server > Activity. It reads the alert list a day at a time ("Reading 3 of 7 days"), then shows a summary line, alerts per day as stacked bars (today on the right), and a camera by hour map (brighter = more). Check: 7/14/30 days and the People/Vehicles/Animals buttons change the numbers; a repeat visit within 10 minutes is instant; tapping a camera (or All cameras) opens the Alerts tab on that camera with the chosen type. Compare a camera's count with the Alerts tab.
+
+## About and web page test (M5)
+Settings > Account. "Open Sightline on the web" should open your server's Sightline page in the browser: it uses the file name below it ("Web page file name", default sightline.htm). CHECK the real file name of the Sightline page on your Blue Iris server and change it there if different. "About Sightline for Android" shows versions and links; "Copy diagnostics" copies a few lines (paste somewhere to check there are no names or addresses).

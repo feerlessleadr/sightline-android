@@ -91,6 +91,8 @@ data class SessionState(
     val downloadFolder: String? = null,
     val downloadFolderName: String? = null,
     val popup: PopupConfig = PopupConfig(),
+    /** The file name of the web version of Sightline on the Blue Iris server (Settings > Account). */
+    val webPage: String = com.feerlessleadr.sightline.data.WebLink.DEFAULT_PAGE,
     /** Sound in the player (on or muted) and its volume, 0 to 2 (1 is normal). */
     val soundOn: Boolean = true,
     val volume: Float = 1f,
@@ -584,6 +586,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         downloadFolder = prefs.getString(KEY_DOWNLOAD_FOLDER, null),
         downloadFolderName = prefs.getString(KEY_DOWNLOAD_FOLDER, null)?.let { folderName(android.net.Uri.parse(it)) },
         popup = PopupConfig.decode(prefs.getString(KEY_POPUP, null)),
+        webPage = com.feerlessleadr.sightline.data.WebLink.clean(prefs.getString(KEY_WEB_PAGE, null)) ?: com.feerlessleadr.sightline.data.WebLink.DEFAULT_PAGE,
         soundOn = prefs.getBoolean(KEY_SOUND_ON, true),
         volume = prefs.getFloat(KEY_VOLUME, 1f).coerceIn(0f, 2f),
         motionSensitivity = prefs.getInt(KEY_MOTION_SENS, 5).coerceIn(1, 10),
@@ -613,6 +616,20 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         val value = level.coerceIn(1, 10)
         prefs.edit().putInt(KEY_MOTION_SENS, value).apply()
         _state.update { s -> s.session?.let { s.copy(session = it.copy(motionSensitivity = value)) } ?: s }
+    }
+
+    /** Saves the web page file name; false if it is not allowed (see [com.feerlessleadr.sightline.data.WebLink]). */
+    fun setWebPage(text: String): Boolean {
+        val clean = com.feerlessleadr.sightline.data.WebLink.clean(text) ?: return false
+        prefs.edit().putString(KEY_WEB_PAGE, clean).apply()
+        _state.update { s -> s.session?.let { s.copy(session = it.copy(webPage = clean)) } ?: s }
+        return true
+    }
+
+    /** The address of the web version of Sightline on the Blue Iris server, to open in the browser; null if it cannot be made. */
+    fun webPageUrl(): String? {
+        val base = (com.feerlessleadr.sightline.data.ServerAddress.parse(prefs.getString(KEY_ADDRESS, "").orEmpty()) as? com.feerlessleadr.sightline.data.AddressResult.Ok)?.url ?: return null
+        return com.feerlessleadr.sightline.data.WebLink.url(base, _state.value.session?.webPage)
     }
 
     /** Which detections pop a camera up on the grid (Settings > Pop up on detection). */
@@ -1170,6 +1187,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     private companion object {
         const val KEY_ALERT_FILTERS = "alert_filters"
         const val KEY_POPUP = "popup_config"
+        const val KEY_WEB_PAGE = "web_page"
         const val KEY_ADDRESS = "address"
         const val KEY_USER = "username"
         const val KEY_TILE_SIZE = "tile_size_"

@@ -45,6 +45,15 @@ class MainActivity : FragmentActivity() {
     /** A notification link waiting to be opened (see [DeepLink]). */
     private var pendingLink by mutableStateOf<DeepLink?>(null)
 
+    /** Opens a web address in the phone's browser. */
+    private fun openInBrowser(url: String) {
+        try {
+            startActivity(android.content.Intent(android.content.Intent.ACTION_VIEW, android.net.Uri.parse(url)))
+        } catch (e: android.content.ActivityNotFoundException) {
+            android.widget.Toast.makeText(this, "No browser found to open that.", android.widget.Toast.LENGTH_LONG).show()
+        }
+    }
+
     override fun onNewIntent(intent: android.content.Intent) {
         super.onNewIntent(intent)
         setIntent(intent)
@@ -123,6 +132,7 @@ class MainActivity : FragmentActivity() {
                 var showServer by rememberSaveable { mutableStateOf(false) }
                 var showLog by rememberSaveable { mutableStateOf(false) }
                 var showActivity by rememberSaveable { mutableStateOf(false) }
+                var showAbout by rememberSaveable { mutableStateOf(false) }
                 var logProblems by rememberSaveable { mutableStateOf(false) }
                 // Leaving the signed-in state (sign-out, lock, expired session) also leaves these screens.
                 LaunchedEffect(session == null) {
@@ -132,6 +142,7 @@ class MainActivity : FragmentActivity() {
                         showServer = false
                         showLog = false
                         showActivity = false
+                        showAbout = false
                     }
                 }
                 // The player shows a camera, or a whole group (which Blue Iris offers as one combined picture).
@@ -147,6 +158,7 @@ class MainActivity : FragmentActivity() {
                     showServer = false
                     showLog = false
                     showActivity = false
+                    showAbout = false
                     groupFrom = null
                     val cams = session.cameras?.cameras.orEmpty()
                     fun find(name: String) = cams.firstOrNull { it.optionValue.equals(name, ignoreCase = true) && it.isEnabled }
@@ -180,6 +192,7 @@ class MainActivity : FragmentActivity() {
                 BackHandler(enabled = live == null && showServer) { showServer = false }
                 BackHandler(enabled = live == null && showLog) { showLog = false }
                 BackHandler(enabled = live == null && showActivity) { showActivity = false }
+                BackHandler(enabled = live == null && showAbout) { showAbout = false }
 
                 when {
                     // Keyed so that a link to another alert on the same camera starts the player afresh.
@@ -216,11 +229,18 @@ class MainActivity : FragmentActivity() {
                         onBack = { liveCamera = null; alertToPlay = null },
                         initialAlert = alertToPlay,
                     ) }
+                    session != null && showAbout -> com.feerlessleadr.sightline.ui.AboutScreen(
+                        session = session,
+                        username = state.form.username,
+                        onOpenUrl = ::openInBrowser,
+                        onBack = { showAbout = false },
+                    )
                     session != null && showActivity -> com.feerlessleadr.sightline.ui.ActivityScreen(
                         feed = viewModel.activity,
                         cameras = session.cameras?.cameras.orEmpty(),
                         onShowAlerts = { camera, type ->
                             showActivity = false
+                            showAbout = false
                             showSettings = false
                             viewModel.alerts.setCamera(camera)
                             viewModel.alerts.select(type, false)
@@ -261,6 +281,9 @@ class MainActivity : FragmentActivity() {
                         onServerStatus = { showServer = true },
                         onSystemLog = { logProblems = false; showLog = true },
                         onActivity = { showActivity = true },
+                        onAbout = { showAbout = true },
+                        onOpenWebPage = { viewModel.webPageUrl()?.let(::openInBrowser) ?: android.widget.Toast.makeText(this@MainActivity, "Can't make the web page address. Check the file name in Settings.", android.widget.Toast.LENGTH_LONG).show() },
+                        onWebPage = viewModel::setWebPage,
                     )
                     session != null -> CameraListScreen(
                         session = session,

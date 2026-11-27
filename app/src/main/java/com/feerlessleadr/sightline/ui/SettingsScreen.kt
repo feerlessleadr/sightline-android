@@ -67,6 +67,9 @@ fun SettingsScreen(
     onServerStatus: () -> Unit,
     onSystemLog: () -> Unit,
     onActivity: () -> Unit,
+    onAbout: () -> Unit,
+    onOpenWebPage: () -> Unit,
+    onWebPage: (String) -> Boolean,
 ) {
     var dialog by remember { mutableStateOf<String?>(null) }
     val probeLines = remember { mutableStateListOf<String>() }
@@ -139,6 +142,9 @@ fun SettingsScreen(
             ActionRow("System log", "Blue Iris's own log: warnings, errors and what it has been doing (needs an admin user)", onSystemLog)
             ActionRow("Activity", "When and where alerts happen: per day and by hour of the day", onActivity)
             Section("Account")
+            ActionRow("About Sightline for Android", "Versions, links, copy diagnostics and the licence", onAbout)
+            ActionRow("Open Sightline on the web", "Opens ${session.webPage} from your Blue Iris server in the browser (the Sightline page, not UI3)", onOpenWebPage)
+            ChoiceRow("Web page file name", session.webPage) { dialog = "webpage" }
             ActionRow("Sign out", null, onSignOut)
             Section("Developer")
             ActionRow(
@@ -178,6 +184,7 @@ fun SettingsScreen(
         }
     }
     if (dialog == "popup") PopupSheet(session.popup, filterSettings, onPopup) { dialog = null }
+    if (dialog == "webpage") WebPageDialog(session.webPage, onWebPage) { dialog = null }
     when (dialog) {
         "quality" -> ChoiceDialog(
             title = "Video quality",
@@ -277,4 +284,30 @@ fun <T> ChoiceDialog(
             footer?.invoke()
         }
     }
+}
+
+/** Asks for the file name of the web version of Sightline on the Blue Iris server (shown as a link on the server's address). */
+@Composable
+private fun WebPageDialog(current: String, onSave: (String) -> Boolean, onDismiss: () -> Unit) {
+    var text by remember { mutableStateOf(current) }
+    var error by remember { mutableStateOf(false) }
+    androidx.compose.material3.AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Web page file name") },
+        text = {
+            Column {
+                Text("The file name of the Sightline web page on your Blue Iris server, for example ${com.feerlessleadr.sightline.data.WebLink.DEFAULT_PAGE}. The link is your sign-in address plus this name.", style = MaterialTheme.typography.bodySmall)
+                androidx.compose.material3.OutlinedTextField(
+                    value = text,
+                    onValueChange = { text = it; error = false },
+                    singleLine = true,
+                    isError = error,
+                    supportingText = { if (error) Text("Use just a file name, like sightline.htm (letters, numbers, dots and dashes).") },
+                    modifier = Modifier.padding(top = 8.dp),
+                )
+            }
+        },
+        confirmButton = { TextButton(onClick = { if (onSave(text)) onDismiss() else error = true }) { Text("Save") } },
+        dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } },
+    )
 }

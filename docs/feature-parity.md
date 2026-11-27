@@ -74,7 +74,7 @@ Status: **Done**, **Partial**, **Planned (Mn)**, **N/A** (with the reason). "And
 | Troubleshooting switches `?grpdebug=1` (outline each camera on the group picture) and `?cliprewind=0/1` (force clip-list rewinding) | Planned (M6): hidden developer options |
 | Flag / protect an alert (`update` command), flags shown, "Flagged" filter; clear message without permission | Player done (M3: chip and sheet); list icons and the Flagged filter done in the alerts tab (M4 slice 1) |
 | Download alert or any range as MP4 (export): re-encode H.264 (default) or original, encoder profile 0 to 3, overlay, audio, choose start/end by draggable handles or set-at-playhead, up to 2 h, size estimate, progress, cancel, readable file name, permission message | Done (M3): whole alert, options, progress, cancel, saved to Downloads, and a range chosen on the timeline (set start/end at the playhead, shaded band, up to 2 h, size estimate); handle dragging not done (the buttons set the ends); list entry with the alerts tab (M4) |
-| Link to open full Blue Iris UI (UI3) | Planned (M5): opens in the browser |
+| Link to open full Blue Iris UI (UI3) | Changed by the owner: opens the Sightline web page on the Blue Iris server (file name is a setting, default sightline.htm), not UI3 (M5 built) |
 
 ## Alerts
 | Web feature | Status |
@@ -101,7 +101,7 @@ Status: **Done**, **Partial**, **Planned (Mn)**, **N/A** (with the reason). "And
 | System log: newest first, level icons, repeat counts, filters (All / Warnings & errors / Info), search; clear message for non-admin users | Built (M5): Settings > System log and the Warnings tile; coloured glyph dots instead of drawn icons; real lines unverified (needs an admin user) |
 | Activity overview: alerts per day for 7/14/30 days stacked by type, camera x hour heat map, People/Vehicles/Animals filters, tap a camera, 4 requests at a time, kept 10 min | Built (M5): Settings > Activity; busy days of 100+ alerts are read in full |
 | Stay signed in through Blue Iris session timeouts | Android: fingerprint/PIN unlock with saved password (done); auto re-sign-in after a session timeout while the app is open (done, M2 round 2: the password stays in memory only after an unlock or a Remember me sign-in) |
-| About: Sightline and Blue Iris versions, links (project, releases, issues), Copy diagnostics (no names, addresses or passwords), licence note, credits | Planned (M5/M6) |
+| About: Sightline and Blue Iris versions, links (project, releases, issues), Copy diagnostics (no names, addresses or passwords), licence note, credits | Built (M5): Settings > About; no recent-errors list yet |
 
 ## Not in the web app either (so not planned)
 Push notifications, two-way audio, saving PTZ presets, focus/IR controls, changing recording or AI settings (view-only).
